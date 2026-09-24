@@ -6,6 +6,7 @@ import time
 from typing import List, Optional, Tuple
 import numpy as np
 
+from src.gestures.gesture_types import GestureType
 from src.gestures.heuristic_classifier import HeuristicGestureClassifier
 from src.intent.state_machine import IntentContext, InteractionStateMachine
 from src.interaction.coordinate_transform import CoordinateTransformer
