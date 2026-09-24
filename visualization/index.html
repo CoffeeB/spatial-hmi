@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Spatial HMI | Gesture-Driven 3D Interactive Globe</title>
+  <link rel="stylesheet" href="css/style.css">
+  <!-- Three.js CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+  <!-- 3D Canvas Viewport -->
+  <div id="canvas-container"></div>
+
+  <!-- Spatial Hand Cursor -->
+  <div id="spatial-cursor">
+    <div class="cursor-ring">
+      <div class="cursor-dot"></div>
+    </div>
+    <div class="cursor-pinch-ring"></div>
+  </div>
+
+  <!-- UI HUD Layer -->
+  <div class="ui-overlay">
+    <!-- Top Bar -->
+    <header class="top-bar">
+      <div class="brand-title">
+        <div class="brand-dot"></div>
+        <div class="brand-text">
+          <h1>SPATIAL HMI</h1>
+          <span>VISION INTERACTION ENGINE</span>
+        </div>
+      </div>
+
+      <div class="status-pill-container">
+        <div class="pill">
+          <div id="ws-status-dot" class="pill-dot disconnected"></div>
+          <span id="ws-status-text">CONNECTING...</span>
+        </div>
+        <div id="state-badge" class="pill state-badge state-idle">IDLE</div>
+      </div>
+    </header>
+
+    <!-- Center HUD Action Text -->
+    <div class="center-hud">
+      <div id="action-label" class="action-label">Awaiting Hand Gesture...</div>
+    </div>
+
+    <!-- Bottom Strip -->
+    <footer class="bottom-bar">
+      <div class="interaction-legend">
+        <div class="legend-item">
+          <span class="legend-gesture">POINT</span>
+          <span class="legend-action">Select Node</span>
+        </div>
+        <div class="legend-divider"></div>
+        <div class="legend-item">
+          <span class="legend-gesture">GRAB + DRAG</span>
+          <span class="legend-action">Rotate Globe</span>
+        </div>
+        <div class="legend-divider"></div>
+        <div class="legend-item">
+          <span class="legend-gesture">PINCH + DRAG</span>
+          <span class="legend-action">Translate Node</span>
+        </div>
+        <div class="legend-divider"></div>
+        <div class="legend-item">
+          <span class="legend-gesture">2-HAND SPREAD</span>
+          <span class="legend-action">Zoom In/Out</span>
+        </div>
+        <div class="legend-divider"></div>
+        <div class="legend-item">
+          <span class="legend-gesture">OPEN PALM</span>
+          <span class="legend-action">Release / Cancel</span>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Developer Telemetry HUD Panel (Press 'D' to toggle) -->
+  <aside id="telemetry-panel" class="telemetry-panel hidden">
+    <div class="panel-header">
+      <h3>RESEARCH TELEMETRY</h3>
+      <span class="toggle-hint">PRESS [D]</span>
+    </div>
+
+    <div class="telemetry-row">
+      <span class="telemetry-label">Pipeline FPS:</span>
+      <span id="fps-value" class="telemetry-value">60.0</span>
+    </div>
+
+    <div class="telemetry-row">
+      <span class="telemetry-label">End-to-End Latency:</span>
+      <span id="latency-value" class="telemetry-value">24.2 ms</span>
+    </div>
+
+    <div class="telemetry-row">
+      <span class="telemetry-label">Interaction State:</span>
+      <span id="state-value" class="telemetry-value">IDLE</span>
+    </div>
+
+    <div class="telemetry-row">
+      <span class="telemetry-label">Active Gesture:</span>
+      <span id="gesture-value" class="telemetry-value">NONE</span>
+    </div>
+
+    <div class="telemetry-row">
+      <span class="telemetry-label">Active Command:</span>
+      <span id="command-value" class="telemetry-value">IDLE</span>
+    </div>
+
+    <div class="telemetry-row">
+      <span class="telemetry-label">Cursor NDC:</span>
+      <span id="cursor-pos-value" class="telemetry-value">(0.00, 0.00)</span>
+    </div>
+
+    <!-- Confidence Gauge -->
+    <div class="confidence-gauge-container">
+      <div class="telemetry-row">
+        <span class="telemetry-label">Intent Confidence:</span>
+        <span id="conf-value-label" class="telemetry-value">0.00</span>
+      </div>
+      <div class="gauge-bar-bg">
+        <div id="conf-bar-fill" class="gauge-bar-fill"></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Component Scripts -->
+  <script src="js/globe.js"></script>
+  <script src="js/nodes.js"></script>
+  <script src="js/spatial_cursor.js"></script>
+  <script src="js/debug_overlay.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

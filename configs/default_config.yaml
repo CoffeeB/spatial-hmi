@@ -1,0 +1,57 @@
+camera:
+  device_index: 0
+  width: 640
+  height: 480
+  target_fps: 30
+  auto_reconnect: true
+  reconnect_delay_sec: 1.0
+
+perception:
+  max_num_hands: 2
+  min_detection_confidence: 0.65
+  min_tracking_confidence: 0.60
+  model_complexity: 1
+
+landmarks:
+  palm_landmark_indices: [0, 5, 9, 17]
+  wrist_index: 0
+  middle_mcp_index: 9
+  velocity_alpha: 0.40
+
+gestures:
+  pinch_threshold: 0.38
+  pinch_steepness: 18.0
+  point_extension_ratio: 1.35
+  open_palm_extension_ratio: 1.25
+  grab_closure_ratio: 0.85
+  two_hand_spread_vel_threshold: 0.05
+  two_hand_rotation_vel_threshold: 0.08
+  min_confidence_threshold: 0.60
+
+intent:
+  evidence_lambda: 0.82
+  activation_threshold: 0.75
+  release_threshold: 0.35
+  confirm_frames: 3
+  candidate_frames: 2
+  hand_loss_timeout_sec: 0.25
+
+smoothing:
+  filter_type: "one_euro" # "one_euro", "ema", or "none"
+  one_euro:
+    fc_min: 1.0
+    beta: 0.007
+    d_cutoff: 1.0
+  dead_zone_radius: 0.003
+  velocity_gate: 0.001
+
+interaction:
+  rotation_sensitivity: 2.8
+  zoom_sensitivity: 1.8
+  translation_sensitivity: 2.2
+  screen_aspect_ratio: 1.7777777777777777 # 16:9
+
+communication:
+  host: "127.0.0.1"
+  port: 8765
+  broadcast_interval_ms: 16.66 # ~60 Hz
