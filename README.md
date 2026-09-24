@@ -167,3 +167,4 @@ gesture-interface/
 While in the WebGL visualizer (`http://localhost:8080/index.html`):
 - **Press `[D]`**: Toggle the real-time **Research Telemetry HUD** displaying Pipeline FPS, End-to-End Latency, Interaction State Lifecycle, Active Gesture, and Intent Confidence Bar Gauge.
 - **Fallback Mouse Mode**: If running without a webcam, click and drag with the mouse to rotate the globe or scroll the mouse wheel to zoom.
+# spatial-hmi
