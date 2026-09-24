@@ -30,4 +30,5 @@ class HMIPacket(BaseModel):
     hands: List[HandTelemetry] = []
     fps: float = 0.0
     latency_ms: float = 0.0
+    video_frame_b64: Optional[str] = None  # Live annotated camera feed
     timestamp: float

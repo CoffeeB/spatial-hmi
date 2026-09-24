@@ -48,9 +48,18 @@ def main():
     parser.add_argument("--dev", action="store_true", help="Open local OpenCV developer debug window")
     parser.add_argument("--http-port", type=int, default=8080, help="Port for static WebGL visualizer")
     parser.add_argument("--synthetic", action="store_true", help="Run in headless synthetic evaluation mode")
+    parser.add_argument("--record", type=str, default=None, help="Path to output JSONL file for recording session telemetry")
     args = parser.parse_args()
 
     config = load_config(args.config)
+
+    # Prepare recording file if requested
+    record_file = None
+    if args.record:
+        record_path = Path(args.record)
+        record_path.parent.mkdir(parents=True, exist_ok=True)
+        record_file = open(record_path, "w", encoding="utf-8")
+        logger.info(f"Server-side telemetry recording active: {record_path}")
 
     # 1. Start Static HTTP Server for Three.js WebGL Visualization
     vis_dir = Path(__file__).parent.parent / "visualization"
@@ -129,6 +138,15 @@ def main():
                     )
                 )
 
+            # Compress annotated frame to base64 JPEG for browser PiP feed
+            video_b64 = None
+            if annotated_frame is not None and not args.synthetic:
+                small_frame = cv2.resize(annotated_frame, (320, 240), interpolation=cv2.INTER_AREA)
+                ret_enc, buf = cv2.imencode(".jpg", small_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 55])
+                if ret_enc:
+                    import base64
+                    video_b64 = base64.b64encode(buf).decode("ascii")
+
             packet = HMIPacket(
                 command=command,
                 intent_state=intent_ctx.state.value,
@@ -137,11 +155,17 @@ def main():
                 hands=telemetry_hands,
                 fps=float(fps),
                 latency_ms=float(latency_ms),
+                video_frame_b64=video_b64,
                 timestamp=now,
             )
 
             # Broadcast via WebSocket
             ws_server.broadcast_packet(packet)
+
+            # Record to disk if server-side recording enabled
+            if record_file is not None:
+                record_file.write(packet.model_dump_json() + "\n")
+                record_file.flush()
 
             # Developer GUI Mode
             if args.dev and annotated_frame is not None:
@@ -183,6 +207,9 @@ def main():
     except KeyboardInterrupt:
         logger.info("Shutdown signal received.")
     finally:
+        if record_file is not None:
+            record_file.close()
+            logger.info("Recording file cleanly closed.")
         if not args.synthetic:
             camera.stop()
         detector.close()

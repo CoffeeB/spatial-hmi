@@ -151,16 +151,20 @@ class InteractionMapper:
                     command_type=SpatialCommandType.TRANSLATE_NODE,
                     interaction_state=state.value,
                     cursor_ndc=(curr_x, curr_y),
+                    delta_translation=(float(dx * self.translation_sensitivity), float(dy * self.translation_sensitivity), 0.0),
                     confidence=intent_ctx.intent_confidence,
                     handedness=primary_hand.handedness,
                     is_pinch_active=True,
                     timestamp=timestamp,
                 )
             elif active_g == GestureType.GRAB:
+                delta_yaw = dx * self.rotation_sensitivity
+                delta_pitch = -dy * self.rotation_sensitivity
                 return SpatialCommand(
                     command_type=SpatialCommandType.ROTATE_OBJECT,
                     interaction_state=state.value,
                     cursor_ndc=(curr_x, curr_y),
+                    delta_rotation=(float(delta_yaw), float(delta_pitch), 0.0),
                     confidence=intent_ctx.intent_confidence,
                     handedness=primary_hand.handedness,
                     timestamp=timestamp,
@@ -168,9 +172,9 @@ class InteractionMapper:
 
         elif state == InteractionState.ACTIVE:
             if active_g == GestureType.GRAB:
-                # Grab + movement -> Rotate 3D Globe
-                delta_yaw = -dx * self.rotation_sensitivity
-                delta_pitch = dy * self.rotation_sensitivity
+                # Grab + movement -> Rotate 3D Globe following hand drag
+                delta_yaw = dx * self.rotation_sensitivity
+                delta_pitch = -dy * self.rotation_sensitivity
                 return SpatialCommand(
                     command_type=SpatialCommandType.ROTATE_OBJECT,
                     interaction_state=state.value,

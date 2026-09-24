@@ -32,18 +32,73 @@
         </div>
       </div>
 
+      <!-- Center Status & Mode -->
       <div class="status-pill-container">
         <div class="pill">
           <div id="ws-status-dot" class="pill-dot disconnected"></div>
           <span id="ws-status-text">CONNECTING...</span>
         </div>
+        <div id="control-mode-badge" class="pill control-mode-badge">MOUSE FALLBACK</div>
         <div id="state-badge" class="pill state-badge state-idle">IDLE</div>
+      </div>
+
+      <!-- Recording Toolbar in Top Right -->
+      <div class="recording-toolbar">
+        <button id="record-btn" class="record-btn">
+          <span class="record-dot"></span>
+          <span id="record-btn-text">START RECORDING</span>
+        </button>
+        <button id="export-btn" class="export-btn hidden">
+          <span class="export-icon">&#x2193;</span>
+          <span>EXPORT DATASET</span>
+        </button>
       </div>
     </header>
 
     <!-- Center HUD Action Text -->
     <div class="center-hud">
       <div id="action-label" class="action-label">Awaiting Hand Gesture...</div>
+      <div id="gesture-prompt" class="gesture-prompt">Show your hand to the camera to begin spatial interaction</div>
+    </div>
+
+    <!-- Live Camera Perception Preview (Bottom Left) -->
+    <div id="camera-container" class="camera-container">
+      <div class="camera-header">
+        <div class="camera-title-group">
+          <div id="camera-live-dot" class="live-dot"></div>
+          <span class="camera-title">LIVE PERCEPTION FEED</span>
+        </div>
+        <div class="camera-controls">
+          <span id="camera-hand-count" class="camera-hand-tag">0 HANDS</span>
+          <button id="camera-toggle-btn" class="camera-toggle-btn" title="Toggle Preview Size">&#x26F6;</button>
+        </div>
+      </div>
+      
+      <div class="camera-feed-wrapper">
+        <img id="camera-feed" class="camera-feed" alt="Webcam Perception Stream" />
+        <div id="camera-placeholder" class="camera-placeholder">
+          <div class="placeholder-spinner"></div>
+          <div class="placeholder-text">WAITING FOR CAMERA STREAM</div>
+          <div class="placeholder-subtext">Run Python HMI Server (scripts/run_hmi_server.py)</div>
+        </div>
+
+        <!-- Over-the-video telemetry overlay -->
+        <div id="camera-feed-overlay" class="camera-feed-overlay hidden">
+          <div id="cam-gesture-badge" class="cam-gesture-badge">NONE</div>
+          <div class="pinch-meter-container">
+            <span class="pinch-meter-label">PINCH:</span>
+            <div class="pinch-meter-bg">
+              <div id="cam-pinch-bar" class="pinch-meter-fill"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recording Active Indicator Banner -->
+      <div id="recording-banner" class="recording-banner hidden">
+        <span class="banner-pulse"></span>
+        <span id="recording-stats-text">REC: 00:00 | 0 frames</span>
+      </div>
     </div>
 
     <!-- Bottom Strip -->
@@ -73,6 +128,12 @@
           <span class="legend-gesture">OPEN PALM</span>
           <span class="legend-action">Release / Cancel</span>
         </div>
+      </div>
+
+      <div class="quick-hints">
+        <span class="hint-key">[D]</span> Research Telemetry HUD &nbsp;|&nbsp;
+        <span class="hint-key">[R]</span> Toggle Recording &nbsp;|&nbsp;
+        <span class="hint-key">[C]</span> Toggle Camera Size
       </div>
     </footer>
   </div>
@@ -123,6 +184,17 @@
       <div class="gauge-bar-bg">
         <div id="conf-bar-fill" class="gauge-bar-fill"></div>
       </div>
+    </div>
+
+    <!-- Session Recording Status in Telemetry -->
+    <div class="telemetry-section-divider"></div>
+    <div class="telemetry-row">
+      <span class="telemetry-label">Recorded Frames:</span>
+      <span id="telemetry-rec-frames" class="telemetry-value">0</span>
+    </div>
+    <div class="telemetry-row">
+      <span class="telemetry-label">Dataset Size:</span>
+      <span id="telemetry-rec-size" class="telemetry-value">0 KB</span>
     </div>
   </aside>
 

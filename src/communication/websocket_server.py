@@ -48,10 +48,10 @@ class HMIWebSocketServer:
         """Initializes the websockets server."""
         self.server = await websockets.serve(self._handler, self.host, self.port)
 
-    async def _handler(self, websocket: WebSocketServerProtocol, path: str):
-        """Handles client connection lifecycle."""
+    async def _handler(self, websocket, *args, **kwargs):
+        """Handles client connection lifecycle across all websockets library versions."""
         self.clients.add(websocket)
-        client_addr = websocket.remote_address
+        client_addr = getattr(websocket, "remote_address", "Client")
         logger.info(f"Visualizer client connected from {client_addr}. Total clients: {len(self.clients)}")
         try:
             async for message in websocket:
@@ -60,7 +60,7 @@ class HMIWebSocketServer:
         except websockets.exceptions.ConnectionClosed:
             pass
         finally:
-            self.clients.remove(websocket)
+            self.clients.discard(websocket)
             logger.info(f"Visualizer client disconnected from {client_addr}. Total clients: {len(self.clients)}")
 
     def broadcast_packet(self, packet: HMIPacket):

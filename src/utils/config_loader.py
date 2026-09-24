@@ -34,20 +34,20 @@ class LandmarksConfig(BaseModel):
 class GesturesConfig(BaseModel):
     pinch_threshold: float = 0.38
     pinch_steepness: float = 18.0
-    point_extension_ratio: float = 1.35
-    open_palm_extension_ratio: float = 1.25
-    grab_closure_ratio: float = 0.85
-    two_hand_spread_vel_threshold: float = 0.05
-    two_hand_rotation_vel_threshold: float = 0.08
-    min_confidence_threshold: float = 0.60
+    point_extension_ratio: float = 1.18
+    open_palm_extension_ratio: float = 1.12
+    grab_closure_ratio: float = 0.90
+    two_hand_spread_vel_threshold: float = 0.04
+    two_hand_rotation_vel_threshold: float = 0.06
+    min_confidence_threshold: float = 0.40
 
 
 class IntentConfig(BaseModel):
-    evidence_lambda: float = 0.82
-    activation_threshold: float = 0.75
-    release_threshold: float = 0.35
-    confirm_frames: int = 3
-    candidate_frames: int = 2
+    evidence_lambda: float = 0.55
+    activation_threshold: float = 0.50
+    release_threshold: float = 0.25
+    confirm_frames: int = 2
+    candidate_frames: int = 1
     hand_loss_timeout_sec: float = 0.25
 
 

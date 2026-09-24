@@ -44,11 +44,11 @@ class InteractionStateMachine:
 
     def __init__(
         self,
-        activation_threshold: float = 0.75,
-        release_threshold: float = 0.35,
-        confirm_frames: int = 3,
-        candidate_frames: int = 2,
-        evidence_lambda: float = 0.82,
+        activation_threshold: float = 0.50,
+        release_threshold: float = 0.25,
+        confirm_frames: int = 2,
+        candidate_frames: int = 1,
+        evidence_lambda: float = 0.55,
         hand_loss_timeout_sec: float = 0.25,
     ):
         self.activation_threshold = activation_threshold
@@ -104,7 +104,7 @@ class InteractionStateMachine:
 
         elif self.state == InteractionState.OBSERVING:
             # Check if gesture evidence crosses candidate threshold
-            if curr_g not in (GestureType.NONE, GestureType.OPEN_PALM) and curr_conf >= 0.60:
+            if curr_g not in (GestureType.NONE, GestureType.OPEN_PALM) and curr_conf >= 0.45:
                 self._transition_to(InteractionState.CANDIDATE, curr_g, now)
             elif curr_g == GestureType.OPEN_PALM:
                 # Open palm maintains hovering state
@@ -114,7 +114,7 @@ class InteractionStateMachine:
             if curr_g == self.active_gesture and current_evidence >= self.activation_threshold:
                 if self.consecutive_frames >= self.confirm_frames:
                     self._transition_to(InteractionState.CONFIRMED, curr_g, now)
-            elif current_evidence < (self.activation_threshold * 0.35) and curr_conf < 0.40:
+            elif current_evidence < (self.activation_threshold * 0.30) and curr_conf < 0.35:
                 # Evidence evaporated -> fall back to OBSERVING
                 self._transition_to(InteractionState.OBSERVING, GestureType.NONE, now)
 

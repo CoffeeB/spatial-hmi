@@ -20,12 +20,12 @@ class HeuristicGestureClassifier:
         self,
         pinch_threshold: float = 0.38,
         pinch_steepness: float = 18.0,
-        point_extension_ratio: float = 1.35,
-        open_palm_extension_ratio: float = 1.25,
-        grab_closure_ratio: float = 0.85,
-        two_hand_spread_vel_threshold: float = 0.05,
-        two_hand_rotation_vel_threshold: float = 0.08,
-        min_confidence_threshold: float = 0.60,
+        point_extension_ratio: float = 1.18,
+        open_palm_extension_ratio: float = 1.12,
+        grab_closure_ratio: float = 0.90,
+        two_hand_spread_vel_threshold: float = 0.04,
+        two_hand_rotation_vel_threshold: float = 0.06,
+        min_confidence_threshold: float = 0.40,
     ):
         self.pinch_threshold = pinch_threshold
         self.pinch_steepness = pinch_steepness
@@ -65,12 +65,13 @@ class HeuristicGestureClassifier:
         point_conf = self.conf_calc.combine_confidences([c_idx_ext, c_mid_curl, c_rng_curl, c_pnk_curl])
 
         # 3. OPEN PALM EVALUATION
-        # All 4 fingers extended
+        # All 4 fingers extended, thumb and index not in pinch contact
         c_all_ext = [
             self.conf_calc.sigmoid_confidence(ratios.get(f, 1.0), self.open_palm_extension_ratio, steepness=10.0)
             for f in ["index", "middle", "ring", "pinky"]
         ]
-        open_palm_conf = self.conf_calc.combine_confidences(c_all_ext)
+        raw_open_palm = self.conf_calc.combine_confidences(c_all_ext)
+        open_palm_conf = raw_open_palm * max(0.0, 1.0 - (pinch_conf * 1.2))
 
         # 4. GRAB EVALUATION
         # All fingers curled tightly

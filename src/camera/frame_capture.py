@@ -98,6 +98,9 @@ class CameraStream:
                     self._open_device()
                 continue
 
+            # Mirror frame horizontally for natural, intuitive front-facing interaction
+            frame = cv2.flip(frame, 1)
+
             # Thread-safe frame swap
             with self.lock:
                 self.frame = frame
