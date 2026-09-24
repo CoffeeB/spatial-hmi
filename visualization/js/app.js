@@ -13,8 +13,15 @@ class SpatialHMIApp {
     this.actionLabel = document.getElementById("action-label");
     this.gesturePrompt = document.getElementById("gesture-prompt");
 
-    // Full-Screen AR Camera Feed Element
-    this.arCameraFeed = document.getElementById("ar-camera-feed");
+    // Camera Preview Container Elements
+    this.cameraContainer = document.getElementById("camera-container");
+    this.cameraFeed = document.getElementById("camera-feed");
+    this.cameraPlaceholder = document.getElementById("camera-placeholder");
+    this.cameraFeedOverlay = document.getElementById("camera-feed-overlay");
+    this.cameraHandCount = document.getElementById("camera-hand-count");
+    this.camGestureBadge = document.getElementById("cam-gesture-badge");
+    this.camPinchBar = document.getElementById("cam-pinch-bar");
+    this.cameraExpandBtn = document.getElementById("camera-expand-btn");
 
     // Cluster Card Elements
     this.clusterCard = document.getElementById("cluster-card");
@@ -37,6 +44,7 @@ class SpatialHMIApp {
     this._initThree();
     this._initGlobeAndNodes();
     this._initSubsystems();
+    this._initCameraControls();
     this._initClusterHandlers();
     this._initRecordingHandlers();
     this._initKeyboardShortcuts();
@@ -93,6 +101,14 @@ class SpatialHMIApp {
     this.debugOverlay = new DebugOverlay();
     this.activeManipulatedNode = null;
     this.hasActiveVisionHand = false;
+  }
+
+  _initCameraControls() {
+    if (this.cameraExpandBtn && this.cameraContainer) {
+      this.cameraExpandBtn.addEventListener("click", () => {
+        this.cameraContainer.classList.toggle("expanded");
+      });
+    }
   }
 
   _initClusterHandlers() {
@@ -254,12 +270,22 @@ class SpatialHMIApp {
     this.hasActiveVisionHand = numHands > 0;
     const [ndcX, ndcY] = cmd.cursor_ndc || [0, 0];
 
-    // 1. Update Full-Screen AR Camera Perception Live Feed
-    if (packet.video_frame_b64 && this.arCameraFeed) {
+    // 1. Update Live Camera Perception Feed
+    if (packet.video_frame_b64 && this.cameraFeed) {
       const srcUrl = "data:image/jpeg;base64," + packet.video_frame_b64;
-      if (this.arCameraFeed.src !== srcUrl) {
-        this.arCameraFeed.src = srcUrl;
+      if (this.cameraFeed.src !== srcUrl) {
+        this.cameraFeed.src = srcUrl;
       }
+      if (this.cameraPlaceholder) this.cameraPlaceholder.classList.add("hidden");
+      if (this.cameraFeedOverlay) this.cameraFeedOverlay.classList.remove("hidden");
+    }
+
+    if (this.cameraHandCount) {
+      this.cameraHandCount.textContent = numHands === 1 ? "1 HAND" : `${numHands} HANDS`;
+    }
+
+    if (this.camGestureBadge) {
+      this.camGestureBadge.textContent = packet.active_gesture || "NONE";
     }
 
     // 2. Update Debug Overlay
@@ -270,6 +296,9 @@ class SpatialHMIApp {
 
     // 4. Update Spatial Cursor & Pinch Meter
     const pinchConf = packet.hands && packet.hands[0] ? packet.hands[0].pinch_confidence : 0;
+    if (this.camPinchBar) {
+      this.camPinchBar.style.width = `${Math.round(pinchConf * 100)}%`;
+    }
     this.cursor.updateFromNDC(ndcX, ndcY, state, cmd.is_pinch_active, pinchConf);
 
     // 5. Spatial Ray-Casting for Node Hover & Pointing

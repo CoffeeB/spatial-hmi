@@ -82,6 +82,37 @@
       </div>
     </div>
 
+    <!-- Live Camera Perception Window (Glassmorphic Floating PiP) -->
+    <div id="camera-container" class="camera-container">
+      <div class="camera-header">
+        <div class="camera-title-group">
+          <div class="live-dot"></div>
+          <span class="camera-title">VISION TRACKER</span>
+        </div>
+        <div class="camera-controls">
+          <span id="camera-hand-count" class="camera-hand-tag">0 HANDS</span>
+          <button id="camera-expand-btn" class="camera-toggle-btn" title="Expand View">&#x26F6;</button>
+        </div>
+      </div>
+      <div class="camera-feed-wrapper">
+        <img id="camera-feed" class="camera-feed" alt="Perception Feed" />
+        <div id="camera-placeholder" class="camera-placeholder">
+          <div class="placeholder-spinner"></div>
+          <span class="placeholder-text">STREAMING CAMERA...</span>
+          <span class="placeholder-subtext">Waiting for video stream</span>
+        </div>
+        <div id="camera-feed-overlay" class="camera-feed-overlay hidden">
+          <span id="cam-gesture-badge" class="cam-gesture-badge">NONE</span>
+          <div class="pinch-meter-container">
+            <span class="pinch-meter-label">PINCH</span>
+            <div class="pinch-meter-bg">
+              <div id="cam-pinch-bar" class="pinch-meter-fill"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Bottom Strip -->
     <footer class="bottom-bar">
       <div class="interaction-legend">
