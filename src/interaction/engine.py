@@ -87,41 +87,62 @@ class InteractionEngine:
             )
             return command, intent_ctx, None
 
-        # Select primary dominant hand (or first hand detected)
-        primary_hand = hand_states[0]
+        # 1. Single Hand Classification for all detected hands
+        hand_recs = [self.classifier.classify_single_hand(h) for h in hand_states]
 
-        # 1. Single Hand Classification
-        single_gesture = self.classifier.classify_single_hand(primary_hand)
+        # 2. Dynamic Dominant Hand Selection
+        # Score each hand's intent priority: PINCH / GRAB / POINT > OPEN_PALM > NONE
+        if len(hand_states) == 1:
+            primary_hand = hand_states[0]
+            single_gesture = hand_recs[0]
+            bimanual_gesture = None
+        else:
+            def hand_intent_score(idx: int) -> float:
+                h = hand_states[idx]
+                rec = hand_recs[idx]
+                score = 0.0
+                if rec.gesture in (GestureType.PINCH, GestureType.GRAB, GestureType.POINT):
+                    score += 2.0 + rec.confidence
+                elif rec.gesture == GestureType.OPEN_PALM:
+                    score += 0.5 + rec.confidence * 0.5
+                # Proximity to screen center bonus
+                dist_to_center = ((h.palm_center[0] - 0.5) ** 2 + (h.palm_center[1] - 0.5) ** 2) ** 0.5
+                score += max(0.0, 0.5 - dist_to_center)
+                return score
 
-        # 2. Bimanual Classification if two hands present
-        bimanual_gesture = None
-        if len(hand_states) >= 2:
-            bimanual_gesture = self.classifier.classify_two_hands(hand_states[0], hand_states[1])
+            scores = [hand_intent_score(i) for i in range(len(hand_states))]
+            dominant_idx = int(np.argmax(scores))
+            primary_hand = hand_states[dominant_idx]
+            single_gesture = hand_recs[dominant_idx]
+
+            # 3. Bimanual Zoom Classification (passes single hand intent to inhibit accidental zoom)
+            bimanual_gesture = self.classifier.classify_two_hands(
+                hand_states[0], hand_states[1], rec1=hand_recs[0], rec2=hand_recs[1]
+            )
 
         # Active recognized gesture for FSM update
         eval_gesture = bimanual_gesture if bimanual_gesture is not None else single_gesture
 
-        # 3. Temporal Intent FSM Update
+        # 4. Temporal Intent FSM Update
         intent_ctx = self.fsm.update(
             hand_detected=True,
             recognized_gesture=eval_gesture,
             timestamp=now,
         )
 
-        # 4. Coordinate Transformation & Spatial Smoothing
-        # Use index tip or palm center as interaction focal point
+        # 5. Coordinate Transformation & Spatial Smoothing
+        # Use index tip or palm center of primary dominant hand
         focal_x = primary_hand.palm_center[0]
         focal_y = primary_hand.palm_center[1]
 
         # Convert normalized camera coords [0, 1] to NDC [-1, 1]
-        # (Camera coordinates are already normalized with mirror flip by LandmarkNormalizer / Transformer)
         raw_ndc_x, raw_ndc_y = self.transformer.normalized_to_ndc(focal_x, focal_y)
 
         # Apply 1€ Adaptive Smoothing
         smoothed_ndc = self.cursor_filter.filter([raw_ndc_x, raw_ndc_y], timestamp=now)
         smoothed_tuple = (float(smoothed_ndc[0]), float(smoothed_ndc[1]))
 
-        # 5. Map to Generic Spatial Command
+        # 6. Map to Generic Spatial Command
         command = self.mapper.map_to_command(
             intent_ctx=intent_ctx,
             primary_hand=primary_hand,

@@ -41,10 +41,10 @@ class HeuristicGestureClassifier:
     def classify_single_hand(self, hand: HandState) -> RecognizedGesture:
         """
         Evaluates one hand against canonical single-hand gesture prototypes:
-        - PINCH: Thumb tip and index tip in close proximity
+        - PINCH: Thumb tip and index tip in close proximity, while other fingers are NOT in a closed fist
         - POINT: Index extended while middle, ring, pinky are curled
         - OPEN_PALM: All fingers extended
-        - GRAB: All fingers curled (closure ratio < grab_closure_ratio)
+        - GRAB: All fingers curled tightly into a closed fist
         - RELEASE: Transition or open state
         """
         ratios = hand.finger_extension_ratios
@@ -53,40 +53,46 @@ class HeuristicGestureClassifier:
         rng_ext = ratios.get("ring", 1.0)
         pnk_ext = ratios.get("pinky", 1.0)
 
-        # 1. PINCH EVALUATION
-        pinch_conf = hand.pinch_confidence
-
-        # 2. POINT EVALUATION
-        # Index extended, other fingers curled
+        # 1. FINGER EXTENSION & CURL METRICS
         c_idx_ext = self.conf_calc.sigmoid_confidence(idx_ext, self.point_extension_ratio, steepness=12.0)
-        c_mid_curl = self.conf_calc.sigmoid_confidence(mid_ext, 1.05, steepness=12.0, invert=True)
-        c_rng_curl = self.conf_calc.sigmoid_confidence(rng_ext, 1.05, steepness=12.0, invert=True)
-        c_pnk_curl = self.conf_calc.sigmoid_confidence(pnk_ext, 1.05, steepness=12.0, invert=True)
-        point_conf = self.conf_calc.combine_confidences([c_idx_ext, c_mid_curl, c_rng_curl, c_pnk_curl])
+        c_idx_curl = self.conf_calc.sigmoid_confidence(idx_ext, self.grab_closure_ratio, steepness=14.0, invert=True)
+        c_mid_curl = self.conf_calc.sigmoid_confidence(mid_ext, self.grab_closure_ratio, steepness=14.0, invert=True)
+        c_rng_curl = self.conf_calc.sigmoid_confidence(rng_ext, self.grab_closure_ratio, steepness=14.0, invert=True)
+        c_pnk_curl = self.conf_calc.sigmoid_confidence(pnk_ext, self.grab_closure_ratio, steepness=14.0, invert=True)
 
-        # 3. OPEN PALM EVALUATION
-        # All 4 fingers extended, thumb and index not in pinch contact
+        # Non-index fingers curl score (middle + ring + pinky)
+        non_index_curl = (c_mid_curl + c_rng_curl + c_pnk_curl) / 3.0
+
+        # 2. GRAB EVALUATION (All 4 fingers curled into a fist)
+        grab_conf = self.conf_calc.combine_confidences([c_idx_curl, c_mid_curl, c_rng_curl, c_pnk_curl])
+
+        # 3. PINCH EVALUATION
+        # In a pinch, thumb and index touch, BUT other fingers are NOT all closed in a fist.
+        # If the whole hand is in a closed fist, pinch is suppressed in favor of GRAB.
+        raw_pinch_conf = hand.pinch_confidence
+        pinch_suppression = 1.0 - (grab_conf * 0.95)
+        pinch_conf = raw_pinch_conf * max(0.0, pinch_suppression)
+
+        # 4. POINT EVALUATION (Index extended, others curled)
+        c_mid_curl_pt = self.conf_calc.sigmoid_confidence(mid_ext, 1.05, steepness=12.0, invert=True)
+        c_rng_curl_pt = self.conf_calc.sigmoid_confidence(rng_ext, 1.05, steepness=12.0, invert=True)
+        c_pnk_curl_pt = self.conf_calc.sigmoid_confidence(pnk_ext, 1.05, steepness=12.0, invert=True)
+        point_conf = self.conf_calc.combine_confidences([c_idx_ext, c_mid_curl_pt, c_rng_curl_pt, c_pnk_curl_pt])
+
+        # 5. OPEN PALM EVALUATION (All fingers extended, not pinching)
         c_all_ext = [
             self.conf_calc.sigmoid_confidence(ratios.get(f, 1.0), self.open_palm_extension_ratio, steepness=10.0)
             for f in ["index", "middle", "ring", "pinky"]
         ]
         raw_open_palm = self.conf_calc.combine_confidences(c_all_ext)
-        open_palm_conf = raw_open_palm * max(0.0, 1.0 - (pinch_conf * 1.2))
-
-        # 4. GRAB EVALUATION
-        # All fingers curled tightly
-        c_all_curl = [
-            self.conf_calc.sigmoid_confidence(ratios.get(f, 1.0), self.grab_closure_ratio, steepness=14.0, invert=True)
-            for f in ["index", "middle", "ring", "pinky"]
-        ]
-        grab_conf = self.conf_calc.combine_confidences(c_all_curl)
+        open_palm_conf = raw_open_palm * max(0.0, 1.0 - (raw_pinch_conf * 1.2))
 
         # Multi-class competitive assignment
         candidate_scores = [
             (GestureType.PINCH, pinch_conf),
+            (GestureType.GRAB, grab_conf),
             (GestureType.POINT, point_conf),
             (GestureType.OPEN_PALM, open_palm_conf),
-            (GestureType.GRAB, grab_conf),
         ]
 
         # Sort by confidence descending
@@ -104,17 +110,31 @@ class HeuristicGestureClassifier:
             handedness=hand.handedness,
             feature_contributions={
                 "pinch_score": float(pinch_conf),
+                "grab_score": float(grab_conf),
                 "point_score": float(point_conf),
                 "open_palm_score": float(open_palm_conf),
-                "grab_score": float(grab_conf),
             },
             timestamp=hand.timestamp,
         )
 
-    def classify_two_hands(self, hand1: HandState, hand2: HandState) -> Optional[RecognizedGesture]:
+    def classify_two_hands(
+        self,
+        hand1: HandState,
+        hand2: HandState,
+        rec1: Optional[RecognizedGesture] = None,
+        rec2: Optional[RecognizedGesture] = None,
+    ) -> Optional[RecognizedGesture]:
         """
-        Classifies bimanual interaction patterns (Spread, Contraction, Rotation).
+        Classifies intentional bimanual zoom interaction patterns (Spread / Contraction).
+        Inhibits bimanual zoom if one hand is executing a deliberate single-hand command (Grab/Point/Pinch).
         """
+        # If either hand has a strong single-hand unilateral gesture (e.g. Pointing or Grabbing),
+        # prioritize single-hand control and do not trigger bimanual zoom.
+        if rec1 and rec1.gesture in (GestureType.POINT, GestureType.GRAB, GestureType.PINCH) and rec1.confidence >= 0.50:
+            return None
+        if rec2 and rec2.gesture in (GestureType.POINT, GestureType.GRAB, GestureType.PINCH) and rec2.confidence >= 0.50:
+            return None
+
         p1 = np.array(hand1.palm_center)
         p2 = np.array(hand2.palm_center)
 
@@ -127,16 +147,17 @@ class HeuristicGestureClassifier:
         if dist < 1e-4:
             return None
 
-        # Radial velocity (rate of change of distance)
+        # Radial velocity (rate of change of distance between palms)
         radial_dir = rel_pos / dist
         rel_vel = v2 - v1
         radial_vel = float(np.dot(rel_vel, radial_dir))
 
         # Check for bimanual expansion (zoom in) or contraction (zoom out)
-        if radial_vel > self.two_hand_spread_vel_threshold:
-            conf = self.conf_calc.sigmoid_confidence(
-                radial_vel, self.two_hand_spread_vel_threshold, steepness=15.0
-            )
+        # Require substantial intentional velocity (> 0.08 units/sec)
+        zoom_vel_threshold = max(self.two_hand_spread_vel_threshold, 0.07)
+
+        if radial_vel > zoom_vel_threshold:
+            conf = self.conf_calc.sigmoid_confidence(radial_vel, zoom_vel_threshold, steepness=15.0)
             return RecognizedGesture(
                 gesture=GestureType.SPREAD,
                 confidence=float(conf),
@@ -145,32 +166,14 @@ class HeuristicGestureClassifier:
                 feature_contributions={"radial_velocity": radial_vel, "distance": float(dist)},
                 timestamp=max(hand1.timestamp, hand2.timestamp),
             )
-        elif radial_vel < -self.two_hand_spread_vel_threshold:
-            conf = self.conf_calc.sigmoid_confidence(
-                -radial_vel, self.two_hand_spread_vel_threshold, steepness=15.0
-            )
+        elif radial_vel < -zoom_vel_threshold:
+            conf = self.conf_calc.sigmoid_confidence(-radial_vel, zoom_vel_threshold, steepness=15.0)
             return RecognizedGesture(
                 gesture=GestureType.CONTRACTION,
                 confidence=float(conf),
                 hand_id=99,
                 handedness="Bimanual",
                 feature_contributions={"radial_velocity": radial_vel, "distance": float(dist)},
-                timestamp=max(hand1.timestamp, hand2.timestamp),
-            )
-
-        # Tangential / angular velocity for two-hand rotation
-        tangential_vel = rel_vel - radial_vel * radial_dir
-        tangential_mag = float(np.linalg.norm(tangential_vel))
-        if tangential_mag > self.two_hand_rotation_vel_threshold:
-            conf = self.conf_calc.sigmoid_confidence(
-                tangential_mag, self.two_hand_rotation_vel_threshold, steepness=12.0
-            )
-            return RecognizedGesture(
-                gesture=GestureType.ROTATION,
-                confidence=float(conf),
-                hand_id=99,
-                handedness="Bimanual",
-                feature_contributions={"tangential_velocity": tangential_mag},
                 timestamp=max(hand1.timestamp, hand2.timestamp),
             )
 
