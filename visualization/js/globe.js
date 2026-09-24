@@ -14,8 +14,8 @@ class InteractiveGlobe {
     this.targetRotationX = 0;
     this.currentRotationY = 0;
     this.currentRotationX = 0;
-    this.autoRotate = true;
-    this.autoRotateSpeed = 0.0012;
+    this.autoRotate = false;
+    this.autoRotateSpeed = 0.0;
 
     this._initHolographicGlobe();
     this._initGraticuleRings();

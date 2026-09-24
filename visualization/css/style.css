@@ -26,64 +26,9 @@ body, html {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background-color: #030508;
+  background: radial-gradient(circle at 50% 50%, #080f1e 0%, #03050a 100%);
   font-family: var(--font-sans);
   color: var(--text-main);
-}
-
-/* Full-Screen AR Camera Passthrough Viewport */
-.ar-viewport {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  z-index: 0;
-  overflow: hidden;
-  background: #020408;
-}
-
-.ar-camera-feed {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-  filter: brightness(0.92) contrast(1.12) saturate(1.05);
-}
-
-.ar-grid-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-image: 
-    linear-gradient(rgba(0, 240, 255, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 240, 255, 0.04) 1px, transparent 1px);
-  background-size: 40px 40px;
-  pointer-events: none;
-}
-
-.ar-scanlines {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%);
-  background-size: 100% 4px;
-  pointer-events: none;
-  opacity: 0.6;
-}
-
-.ar-vignette {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  box-shadow: inset 0 0 120px rgba(2, 6, 15, 0.85);
-  pointer-events: none;
 }
 
 #canvas-container {
@@ -92,7 +37,7 @@ body, html {
   left: 0;
   width: 100%;
   height: 100%;
-  z-index: 2;
+  z-index: 1;
   pointer-events: auto;
 }
 

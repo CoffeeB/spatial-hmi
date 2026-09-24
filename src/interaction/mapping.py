@@ -18,6 +18,7 @@ class SpatialCommandType(str, Enum):
     SELECT = "SELECT"
     ROTATE_OBJECT = "ROTATE_OBJECT"
     SCALE_OBJECT = "SCALE_OBJECT"
+    BIMANUAL_NAV = "BIMANUAL_NAV"
     TRANSLATE_NODE = "TRANSLATE_NODE"
     RELEASE_OBJECT = "RELEASE_OBJECT"
     CANCEL_INTERACTION = "CANCEL_INTERACTION"
@@ -59,6 +60,8 @@ class InteractionMapper:
         self.dead_zone_radius = dead_zone_radius
 
         self.prev_cursor_ndc: Optional[Tuple[float, float]] = None
+        self.prev_bimanual_midpoint: Optional[Tuple[float, float]] = None
+        self.prev_bimanual_dist: Optional[float] = None
 
     def map_to_command(
         self,
@@ -67,6 +70,7 @@ class InteractionMapper:
         bimanual_gesture: Optional[RecognizedGesture],
         smoothed_cursor_ndc: Tuple[float, float],
         timestamp: float,
+        secondary_hand: Optional[HandState] = None,
     ) -> SpatialCommand:
         """Translates current perceptual context to a high-level spatial command."""
         state = intent_ctx.state
@@ -75,6 +79,8 @@ class InteractionMapper:
         # Default IDLE / HOVER command
         if state == InteractionState.IDLE or primary_hand is None:
             self.prev_cursor_ndc = None
+            self.prev_bimanual_midpoint = None
+            self.prev_bimanual_dist = None
             return SpatialCommand(
                 command_type=SpatialCommandType.IDLE,
                 interaction_state=state.value,
@@ -95,11 +101,54 @@ class InteractionMapper:
 
         self.prev_cursor_ndc = (curr_x, curr_y)
 
-        # 1. Bimanual Zoom / Rotation
+        # 1. Continuous Two-Hand Navigation Mode
+        # If two hands are in view and primary hand is not locked in a single-hand precision gesture (POINT or PINCH)
+        if primary_hand is not None and secondary_hand is not None and active_g not in (GestureType.POINT, GestureType.PINCH):
+            p1 = primary_hand.palm_center
+            p2 = secondary_hand.palm_center
+            mid_x = (p1[0] + p2[0]) * 0.5
+            mid_y = (p1[1] + p2[1]) * 0.5
+            inter_dist = ((p2[0] - p1[0]) ** 2 + (p2[1] - p1[1]) ** 2) ** 0.5
+
+            delta_yaw, delta_pitch = 0.0, 0.0
+            scale_factor = 1.0
+
+            if self.prev_bimanual_midpoint is not None:
+                # Mirror x movement for natural drag
+                bm_dx = -(mid_x - self.prev_bimanual_midpoint[0])
+                bm_dy = (mid_y - self.prev_bimanual_midpoint[1])
+                bm_dist_move = (bm_dx**2 + bm_dy**2) ** 0.5
+                if bm_dist_move > self.dead_zone_radius:
+                    delta_yaw = bm_dx * self.rotation_sensitivity * 3.5
+                    delta_pitch = bm_dy * self.rotation_sensitivity * 3.5
+
+            if self.prev_bimanual_dist is not None and self.prev_bimanual_dist > 1e-4:
+                dist_delta = inter_dist - self.prev_bimanual_dist
+                if abs(dist_delta) > 0.002:
+                    scale_factor = 1.0 + (dist_delta * self.zoom_sensitivity * 4.0)
+                    scale_factor = max(0.85, min(1.15, float(scale_factor)))
+
+            self.prev_bimanual_midpoint = (mid_x, mid_y)
+            self.prev_bimanual_dist = inter_dist
+
+            return SpatialCommand(
+                command_type=SpatialCommandType.BIMANUAL_NAV,
+                interaction_state=state.value,
+                cursor_ndc=(curr_x, curr_y),
+                delta_rotation=(float(delta_yaw), float(delta_pitch), 0.0),
+                delta_scale=float(scale_factor),
+                confidence=max(0.7, intent_ctx.intent_confidence),
+                handedness="Bimanual",
+                timestamp=timestamp,
+            )
+        else:
+            self.prev_bimanual_midpoint = None
+            self.prev_bimanual_dist = None
+
+        # 2. Discrete Bimanual Spread / Contraction Gesture Fallback
         if bimanual_gesture is not None and bimanual_gesture.gesture in (
             GestureType.SPREAD,
             GestureType.CONTRACTION,
-            GestureType.ROTATION,
         ):
             if bimanual_gesture.gesture == GestureType.SPREAD:
                 scale_factor = 1.0 + self.zoom_sensitivity * abs(bimanual_gesture.feature_contributions.get("radial_velocity", 0.1))

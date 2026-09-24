@@ -95,6 +95,7 @@ class InteractionEngine:
         # Score each hand's intent priority: PINCH / GRAB / POINT > OPEN_PALM > NONE
         if len(hand_states) == 1:
             primary_hand = hand_states[0]
+            secondary_hand = None
             single_gesture = hand_recs[0]
             bimanual_gesture = None
         else:
@@ -113,7 +114,10 @@ class InteractionEngine:
 
             scores = [hand_intent_score(i) for i in range(len(hand_states))]
             dominant_idx = int(np.argmax(scores))
+            secondary_idx = 1 - dominant_idx if len(hand_states) == 2 else None
+
             primary_hand = hand_states[dominant_idx]
+            secondary_hand = hand_states[secondary_idx] if secondary_idx is not None else None
             single_gesture = hand_recs[dominant_idx]
 
             # 3. Bimanual Zoom Classification (passes single hand intent to inhibit accidental zoom)
@@ -150,6 +154,7 @@ class InteractionEngine:
             bimanual_gesture=bimanual_gesture,
             smoothed_cursor_ndc=smoothed_tuple,
             timestamp=now,
+            secondary_hand=secondary_hand,
         )
 
         return command, intent_ctx, primary_hand

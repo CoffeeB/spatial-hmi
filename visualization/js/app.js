@@ -317,6 +317,20 @@ class SpatialHMIApp {
         }
         break;
 
+      case "BIMANUAL_NAV":
+        if (cmd.delta_rotation) {
+          const [deltaYaw, deltaPitch] = cmd.delta_rotation;
+          if (Math.abs(deltaYaw) > 0.0001 || Math.abs(deltaPitch) > 0.0001) {
+            this.globe.applyRotationDelta(deltaYaw, deltaPitch);
+          }
+        }
+        if (cmd.delta_scale && Math.abs(cmd.delta_scale - 1.0) > 0.001) {
+          this.targetCameraDistance = Math.max(3.6, Math.min(11.0, this.targetCameraDistance / cmd.delta_scale));
+        }
+        this.actionLabel.textContent = "Two-Hand Navigation";
+        this.gesturePrompt.textContent = "Move both hands together to rotate; spread or close hands to zoom.";
+        break;
+
       case "ROTATE_OBJECT":
         if (cmd.delta_rotation) {
           const [deltaYaw, deltaPitch] = cmd.delta_rotation;
@@ -340,26 +354,21 @@ class SpatialHMIApp {
           this.nodeManager.translateNode(this.activeManipulatedNode, dx, dy);
           this.actionLabel.textContent = `Manipulating: ${this.activeManipulatedNode.label}`;
           this.gesturePrompt.textContent = "Holding node. Release pinch to anchor new spatial position.";
-        } else if (hoveredNode) {
-          this.activeManipulatedNode = hoveredNode;
-          if (hoveredNode.isSubnode) {
-            this.nodeManager.selectSubnode(hoveredNode);
-          } else {
-            this.nodeManager.selectNode(hoveredNode);
-          }
         }
         break;
 
       case "RELEASE_OBJECT":
         this.activeManipulatedNode = null;
-        this.actionLabel.textContent = "Interaction Released";
+        this.actionLabel.textContent = "Observing Hologram";
         this.gesturePrompt.textContent = "Hand opened. Hologram steady.";
         break;
 
       case "IDLE":
       default:
-        this.actionLabel.textContent = "Awaiting Hand Gesture...";
-        this.gesturePrompt.textContent = "Show your hand to the camera to interact with holographic nodes";
+        this.actionLabel.textContent = this.nodeManager.expandedCluster
+          ? `Observing Cluster: ${this.nodeManager.expandedCluster.label}`
+          : "Observing Hologram";
+        this.gesturePrompt.textContent = "Show hand(s) to rotate, zoom, or point at nodes";
         break;
     }
   }

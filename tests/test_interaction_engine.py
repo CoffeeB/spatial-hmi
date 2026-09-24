@@ -53,3 +53,37 @@ def test_interaction_engine_two_hands_dominant_selection():
     command, intent_ctx, primary = engine.process_hands([hand1, hand2], timestamp=1.0)
     assert primary is not None
     assert primary.hand_id == 1  # Hand 2 with active fist should be selected as dominant
+
+
+def test_interaction_engine_two_hands_bimanual_nav():
+    engine = InteractionEngine()
+
+    # Hand 1: Open palm on left
+    pts1 = np.zeros((21, 3), dtype=np.float32)
+    pts1[0] = [0.3, 0.8, 0.0]
+    pts1[4] = [0.22, 0.52, 0.0]; pts1[8] = [0.25, 0.30, 0.0]; pts1[12] = [0.30, 0.28, 0.0]; pts1[16] = [0.35, 0.34, 0.0]; pts1[20] = [0.40, 0.40, 0.0]
+    hand1 = build_hand_state(pts1, hand_id=0)
+
+    # Hand 2: Open palm on right
+    pts2 = np.zeros((21, 3), dtype=np.float32)
+    pts2[0] = [0.7, 0.8, 0.0]
+    pts2[4] = [0.62, 0.52, 0.0]; pts2[8] = [0.65, 0.30, 0.0]; pts2[12] = [0.70, 0.28, 0.0]; pts2[16] = [0.75, 0.34, 0.0]; pts2[20] = [0.80, 0.40, 0.0]
+    hand2 = build_hand_state(pts2, hand_id=1)
+
+    # Step 1: Initial calibration frame
+    cmd1, _, _ = engine.process_hands([hand1, hand2], timestamp=1.0)
+    assert cmd1.command_type == SpatialCommandType.BIMANUAL_NAV
+
+    # Step 2: Hands move together to the right and spread apart
+    pts1_moved = pts1.copy()
+    pts1_moved[:, 0] -= 0.05  # moved left (spreading)
+    pts2_moved = pts2.copy()
+    pts2_moved[:, 0] += 0.08  # moved right (spreading + shifting right)
+
+    hand1_next = build_hand_state(pts1_moved, hand_id=0)
+    hand2_next = build_hand_state(pts2_moved, hand_id=1)
+
+    cmd2, _, _ = engine.process_hands([hand1_next, hand2_next], timestamp=1.1)
+    assert cmd2.command_type == SpatialCommandType.BIMANUAL_NAV
+    assert cmd2.delta_scale > 1.0  # Expanding distance yields zoom-in factor > 1.0
+
