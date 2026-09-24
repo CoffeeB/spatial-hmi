@@ -124,9 +124,14 @@ class InteractionMapper:
 
             if self.prev_bimanual_dist is not None and self.prev_bimanual_dist > 1e-4:
                 dist_delta = inter_dist - self.prev_bimanual_dist
-                if abs(dist_delta) > 0.002:
-                    scale_factor = 1.0 + (dist_delta * self.zoom_sensitivity * 4.0)
-                    scale_factor = max(0.85, min(1.15, float(scale_factor)))
+                # Two hands coming together -> zoom in all nodes
+                if dist_delta < -0.002:
+                    scale_factor = 1.0 + abs(dist_delta) * self.zoom_sensitivity * 5.0
+                    scale_factor = min(1.20, float(scale_factor))
+                # Two hands moving apart -> zoom out
+                elif dist_delta > 0.002:
+                    scale_factor = 1.0 - abs(dist_delta) * self.zoom_sensitivity * 5.0
+                    scale_factor = max(0.80, float(scale_factor))
 
             self.prev_bimanual_midpoint = (mid_x, mid_y)
             self.prev_bimanual_dist = inter_dist
@@ -150,8 +155,9 @@ class InteractionMapper:
             GestureType.SPREAD,
             GestureType.CONTRACTION,
         ):
-            if bimanual_gesture.gesture == GestureType.SPREAD:
-                scale_factor = 1.0 + self.zoom_sensitivity * abs(bimanual_gesture.feature_contributions.get("radial_velocity", 0.1))
+            if bimanual_gesture.gesture == GestureType.CONTRACTION:
+                # Two hands coming together -> zoom in
+                scale_factor = 1.0 + self.zoom_sensitivity * abs(bimanual_gesture.feature_contributions.get("radial_velocity", 0.1)) * 2.0
                 return SpatialCommand(
                     command_type=SpatialCommandType.SCALE_OBJECT,
                     interaction_state=state.value,
@@ -160,8 +166,8 @@ class InteractionMapper:
                     confidence=bimanual_gesture.confidence,
                     timestamp=timestamp,
                 )
-            elif bimanual_gesture.gesture == GestureType.CONTRACTION:
-                scale_factor = 1.0 - self.zoom_sensitivity * abs(bimanual_gesture.feature_contributions.get("radial_velocity", 0.1))
+            elif bimanual_gesture.gesture == GestureType.SPREAD:
+                scale_factor = 1.0 - self.zoom_sensitivity * abs(bimanual_gesture.feature_contributions.get("radial_velocity", 0.1)) * 2.0
                 return SpatialCommand(
                     command_type=SpatialCommandType.SCALE_OBJECT,
                     interaction_state=state.value,
@@ -171,7 +177,71 @@ class InteractionMapper:
                     timestamp=timestamp,
                 )
 
-        # 2. Single-Hand Interaction Mapping based on FSM State
+        # 3. Directional Slap / Swipe Mapping
+        if active_g == GestureType.SWIPE_LEFT:
+            return SpatialCommand(
+                command_type=SpatialCommandType.ROTATE_OBJECT,
+                interaction_state=state.value,
+                cursor_ndc=(curr_x, curr_y),
+                delta_rotation=(-0.16, 0.0, 0.0),
+                confidence=intent_ctx.intent_confidence,
+                handedness=primary_hand.handedness,
+                timestamp=timestamp,
+            )
+        elif active_g == GestureType.SWIPE_RIGHT:
+            return SpatialCommand(
+                command_type=SpatialCommandType.ROTATE_OBJECT,
+                interaction_state=state.value,
+                cursor_ndc=(curr_x, curr_y),
+                delta_rotation=(0.16, 0.0, 0.0),
+                confidence=intent_ctx.intent_confidence,
+                handedness=primary_hand.handedness,
+                timestamp=timestamp,
+            )
+        elif active_g == GestureType.SWIPE_UP:
+            return SpatialCommand(
+                command_type=SpatialCommandType.ROTATE_OBJECT,
+                interaction_state=state.value,
+                cursor_ndc=(curr_x, curr_y),
+                delta_rotation=(0.0, 0.16, 0.0),
+                confidence=intent_ctx.intent_confidence,
+                handedness=primary_hand.handedness,
+                timestamp=timestamp,
+            )
+        elif active_g == GestureType.SWIPE_DOWN:
+            return SpatialCommand(
+                command_type=SpatialCommandType.ROTATE_OBJECT,
+                interaction_state=state.value,
+                cursor_ndc=(curr_x, curr_y),
+                delta_rotation=(0.0, -0.16, 0.0),
+                confidence=intent_ctx.intent_confidence,
+                handedness=primary_hand.handedness,
+                timestamp=timestamp,
+            )
+
+        # 4. Single Hand Finger Spread / Squeeze (Zoom in / Zoom out)
+        if active_g == GestureType.SPREAD_FINGERS:
+            return SpatialCommand(
+                command_type=SpatialCommandType.SCALE_OBJECT,
+                interaction_state=state.value,
+                cursor_ndc=(curr_x, curr_y),
+                delta_scale=1.04,
+                confidence=intent_ctx.intent_confidence,
+                handedness=primary_hand.handedness,
+                timestamp=timestamp,
+            )
+        elif active_g == GestureType.SQUEEZE_FINGERS:
+            return SpatialCommand(
+                command_type=SpatialCommandType.SCALE_OBJECT,
+                interaction_state=state.value,
+                cursor_ndc=(curr_x, curr_y),
+                delta_scale=0.96,
+                confidence=intent_ctx.intent_confidence,
+                handedness=primary_hand.handedness,
+                timestamp=timestamp,
+            )
+
+        # 5. Single-Hand Interaction Mapping based on FSM State
         if state in (InteractionState.OBSERVING, InteractionState.CANDIDATE):
             cmd_type = SpatialCommandType.HOVER
             return SpatialCommand(

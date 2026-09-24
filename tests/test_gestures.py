@@ -110,3 +110,53 @@ def test_classify_pinch():
 
     assert rec.gesture == GestureType.PINCH
     assert rec.confidence > 0.85
+
+
+def test_classify_directional_slaps():
+    classifier = HeuristicGestureClassifier()
+
+    # Open palm landmarks
+    pts = np.zeros((21, 3), dtype=np.float32)
+    pts[0] = [0.5, 0.8, 0.0]
+    pts[4] = [0.32, 0.52, 0.0]; pts[8] = [0.45, 0.30, 0.0]; pts[12] = [0.50, 0.28, 0.0]; pts[16] = [0.55, 0.34, 0.0]; pts[20] = [0.60, 0.40, 0.0]
+    pts[5] = [0.45, 0.60, 0.0]; pts[9] = [0.50, 0.58, 0.0]; pts[13] = [0.55, 0.60, 0.0]; pts[17] = [0.60, 0.64, 0.0]
+
+    # Slap Left (vx = -0.65)
+    hand_left = build_hand_state(pts)
+    hand_left.palm_velocity = (-0.65, 0.0, 0.0)
+    rec_left = classifier.classify_single_hand(hand_left)
+    assert rec_left.gesture == GestureType.SWIPE_LEFT
+
+    # Slap Right (vx = +0.65)
+    hand_right = build_hand_state(pts)
+    hand_right.palm_velocity = (0.65, 0.0, 0.0)
+    rec_right = classifier.classify_single_hand(hand_right)
+    assert rec_right.gesture == GestureType.SWIPE_RIGHT
+
+    # Slap Up (vy = -0.65)
+    hand_up = build_hand_state(pts)
+    hand_up.palm_velocity = (0.0, -0.65, 0.0)
+    rec_up = classifier.classify_single_hand(hand_up)
+    assert rec_up.gesture == GestureType.SWIPE_UP
+
+    # Slap Down (vy = +0.65)
+    hand_down = build_hand_state(pts)
+    hand_down.palm_velocity = (0.0, 0.65, 0.0)
+    rec_down = classifier.classify_single_hand(hand_down)
+    assert rec_down.gesture == GestureType.SWIPE_DOWN
+
+
+def test_classify_spread_fingers():
+    classifier = HeuristicGestureClassifier()
+
+    pts = np.zeros((21, 3), dtype=np.float32)
+    pts[0] = [0.5, 0.8, 0.0]
+    # Fingers extended high and spread wide
+    pts[4] = [0.25, 0.45, 0.0]; pts[8] = [0.40, 0.25, 0.0]; pts[12] = [0.50, 0.22, 0.0]; pts[16] = [0.60, 0.26, 0.0]; pts[20] = [0.72, 0.35, 0.0]
+    pts[5] = [0.45, 0.60, 0.0]; pts[9] = [0.50, 0.58, 0.0]; pts[13] = [0.55, 0.60, 0.0]; pts[17] = [0.60, 0.64, 0.0]
+
+    hand = build_hand_state(pts)
+    rec = classifier.classify_single_hand(hand)
+    assert rec.gesture in (GestureType.SPREAD_FINGERS, GestureType.OPEN_PALM)
+    assert rec.confidence > 0.70
+

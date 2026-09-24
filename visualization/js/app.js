@@ -328,23 +328,39 @@ class SpatialHMIApp {
           this.targetCameraDistance = Math.max(3.6, Math.min(11.0, this.targetCameraDistance / cmd.delta_scale));
         }
         this.actionLabel.textContent = "Two-Hand Navigation";
-        this.gesturePrompt.textContent = "Move both hands together to rotate; spread or close hands to zoom.";
+        this.gesturePrompt.textContent = "Move both hands to rotate globe; bring hands together to zoom in all nodes.";
         break;
 
       case "ROTATE_OBJECT":
         if (cmd.delta_rotation) {
           const [deltaYaw, deltaPitch] = cmd.delta_rotation;
           this.globe.applyRotationDelta(deltaYaw, deltaPitch);
-          this.actionLabel.textContent = "Rotating Hologram";
-          this.gesturePrompt.textContent = "Move closed fist across screen to rotate. Open hand to release.";
+          if (packet.active_gesture === "SWIPE_LEFT") {
+            this.actionLabel.textContent = "Slap Left -> Moving Left";
+          } else if (packet.active_gesture === "SWIPE_RIGHT") {
+            this.actionLabel.textContent = "Slap Right -> Moving Right";
+          } else if (packet.active_gesture === "SWIPE_UP") {
+            this.actionLabel.textContent = "Slap Up -> Moving Up";
+          } else if (packet.active_gesture === "SWIPE_DOWN") {
+            this.actionLabel.textContent = "Slap Down -> Moving Down";
+          } else {
+            this.actionLabel.textContent = "Rotating Hologram";
+          }
+          this.gesturePrompt.textContent = "Slap or move hand to rotate globe. Open hand to release.";
         }
         break;
 
       case "SCALE_OBJECT":
         if (cmd.delta_scale) {
           this.targetCameraDistance = Math.max(3.6, Math.min(11.0, this.targetCameraDistance / cmd.delta_scale));
-          this.actionLabel.textContent = "Spatial Zooming";
-          this.gesturePrompt.textContent = "Spread two hands apart to zoom in, bring closer to zoom out.";
+          if (packet.active_gesture === "SPREAD_FINGERS") {
+            this.actionLabel.textContent = "Spread Fingers -> Zooming In";
+          } else if (packet.active_gesture === "SQUEEZE_FINGERS") {
+            this.actionLabel.textContent = "Squeeze Fingers -> Zooming Out";
+          } else {
+            this.actionLabel.textContent = "Spatial Zooming";
+          }
+          this.gesturePrompt.textContent = "Spread fingers or bring 2 hands together to zoom in; squeeze to zoom out.";
         }
         break;
 
@@ -352,8 +368,8 @@ class SpatialHMIApp {
         if (this.activeManipulatedNode && cmd.delta_translation) {
           const [dx, dy] = cmd.delta_translation;
           this.nodeManager.translateNode(this.activeManipulatedNode, dx, dy);
-          this.actionLabel.textContent = `Manipulating: ${this.activeManipulatedNode.label}`;
-          this.gesturePrompt.textContent = "Holding node. Release pinch to anchor new spatial position.";
+          this.actionLabel.textContent = `Pinch Node: Following Finger (${this.activeManipulatedNode.label})`;
+          this.gesturePrompt.textContent = "Node is tracking finger. Release pinch to anchor new position.";
         }
         break;
 
@@ -368,7 +384,7 @@ class SpatialHMIApp {
         this.actionLabel.textContent = this.nodeManager.expandedCluster
           ? `Observing Cluster: ${this.nodeManager.expandedCluster.label}`
           : "Observing Hologram";
-        this.gesturePrompt.textContent = "Show hand(s) to rotate, zoom, or point at nodes";
+        this.gesturePrompt.textContent = "Slap L/R/U/D to move, pinch to track node, spread/squeeze fingers to zoom";
         break;
     }
   }

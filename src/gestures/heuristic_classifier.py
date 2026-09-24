@@ -87,13 +87,44 @@ class HeuristicGestureClassifier:
         raw_open_palm = self.conf_calc.combine_confidences(c_all_ext)
         open_palm_conf = raw_open_palm * max(0.0, 1.0 - (raw_pinch_conf * 1.2))
 
+        # 6. DIRECTIONAL SLAP / SWIPE EVALUATION (Fast directional palm velocity)
+        vx, vy, vz = hand.palm_velocity
+        swipe_conf = 0.0
+        swipe_gesture = None
+        swipe_vel_thresh = 0.30
+
+        if open_palm_conf >= 0.40 and (abs(vx) > swipe_vel_thresh or abs(vy) > swipe_vel_thresh):
+            if abs(vx) >= abs(vy):
+                if vx < -swipe_vel_thresh:
+                    swipe_gesture = GestureType.SWIPE_LEFT
+                    swipe_conf = self.conf_calc.sigmoid_confidence(-vx, swipe_vel_thresh, steepness=10.0)
+                elif vx > swipe_vel_thresh:
+                    swipe_gesture = GestureType.SWIPE_RIGHT
+                    swipe_conf = self.conf_calc.sigmoid_confidence(vx, swipe_vel_thresh, steepness=10.0)
+            else:
+                if vy < -swipe_vel_thresh:
+                    swipe_gesture = GestureType.SWIPE_UP
+                    swipe_conf = self.conf_calc.sigmoid_confidence(-vy, swipe_vel_thresh, steepness=10.0)
+                elif vy > swipe_vel_thresh:
+                    swipe_gesture = GestureType.SWIPE_DOWN
+                    swipe_conf = self.conf_calc.sigmoid_confidence(vy, swipe_vel_thresh, steepness=10.0)
+
+        # 7. SINGLE HAND SPREAD & SQUEEZE FINGERS (Zoom in / out)
+        spread_score = open_palm_conf if (idx_ext > 1.22 and mid_ext > 1.22 and rng_ext > 1.22 and pnk_ext > 1.22) else 0.0
+        squeeze_score = grab_conf if (idx_ext < 0.92 and mid_ext < 0.92 and rng_ext < 0.92 and pnk_ext < 0.92 and raw_pinch_conf < 0.4) else 0.0
+
         # Multi-class competitive assignment
         candidate_scores = [
             (GestureType.PINCH, pinch_conf),
             (GestureType.GRAB, grab_conf),
             (GestureType.POINT, point_conf),
+            (GestureType.SPREAD_FINGERS, spread_score * 0.95),
+            (GestureType.SQUEEZE_FINGERS, squeeze_score * 0.95),
             (GestureType.OPEN_PALM, open_palm_conf),
         ]
+
+        if swipe_gesture is not None and swipe_conf > 0.60:
+            candidate_scores.insert(0, (swipe_gesture, swipe_conf * 1.2))
 
         # Sort by confidence descending
         candidate_scores.sort(key=lambda x: x[1], reverse=True)
@@ -113,6 +144,8 @@ class HeuristicGestureClassifier:
                 "grab_score": float(grab_conf),
                 "point_score": float(point_conf),
                 "open_palm_score": float(open_palm_conf),
+                "vx": float(vx),
+                "vy": float(vy),
             },
             timestamp=hand.timestamp,
         )

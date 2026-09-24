@@ -15,9 +15,15 @@ class GestureType(str, Enum):
     POINT = "POINT"
     GRAB = "GRAB"
     RELEASE = "RELEASE"
-    SPREAD = "SPREAD"  # Bimanual expansion (zoom in)
-    CONTRACTION = "CONTRACTION"  # Bimanual contraction (zoom out)
+    SPREAD = "SPREAD"  # Bimanual expansion
+    CONTRACTION = "CONTRACTION"  # Bimanual contraction (zoom in all nodes / zoom)
     ROTATION = "ROTATION"  # Bimanual or angular rotation
+    SWIPE_LEFT = "SWIPE_LEFT"  # Slap / swipe left
+    SWIPE_RIGHT = "SWIPE_RIGHT"  # Slap / swipe right
+    SWIPE_UP = "SWIPE_UP"  # Slap / swipe up
+    SWIPE_DOWN = "SWIPE_DOWN"  # Slap / swipe down
+    SPREAD_FINGERS = "SPREAD_FINGERS"  # Spreading fingers wide -> zoom in
+    SQUEEZE_FINGERS = "SQUEEZE_FINGERS"  # Squeezing fingers together -> zoom out
 
 
 class RecognizedGesture(BaseModel):

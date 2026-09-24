@@ -74,16 +74,16 @@ def test_interaction_engine_two_hands_bimanual_nav():
     cmd1, _, _ = engine.process_hands([hand1, hand2], timestamp=1.0)
     assert cmd1.command_type == SpatialCommandType.BIMANUAL_NAV
 
-    # Step 2: Hands move together to the right and spread apart
-    pts1_moved = pts1.copy()
-    pts1_moved[:, 0] -= 0.05  # moved left (spreading)
-    pts2_moved = pts2.copy()
-    pts2_moved[:, 0] += 0.08  # moved right (spreading + shifting right)
+    # Step 2: Hands move together towards center (distance decreasing)
+    pts1_together = pts1.copy()
+    pts1_together[:, 0] += 0.05  # moved right towards center
+    pts2_together = pts2.copy()
+    pts2_together[:, 0] -= 0.05  # moved left towards center
 
-    hand1_next = build_hand_state(pts1_moved, hand_id=0)
-    hand2_next = build_hand_state(pts2_moved, hand_id=1)
+    hand1_next = build_hand_state(pts1_together, hand_id=0)
+    hand2_next = build_hand_state(pts2_together, hand_id=1)
 
     cmd2, _, _ = engine.process_hands([hand1_next, hand2_next], timestamp=1.1)
     assert cmd2.command_type == SpatialCommandType.BIMANUAL_NAV
-    assert cmd2.delta_scale > 1.0  # Expanding distance yields zoom-in factor > 1.0
+    assert cmd2.delta_scale > 1.0  # Hands coming together zooms in (scale > 1.0)
 
