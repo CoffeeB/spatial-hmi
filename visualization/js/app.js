@@ -13,7 +13,8 @@ class SpatialHMIApp {
     this.actionLabel = document.getElementById("action-label");
     this.gesturePrompt = document.getElementById("gesture-prompt");
 
-    // Camera Preview Container Elements
+    // Full-Screen Camera Screen Feed Element
+    this.cameraScreenFeed = document.getElementById("camera-screen-feed");
     this.cameraContainer = document.getElementById("camera-container");
     this.cameraFeed = document.getElementById("camera-feed");
     this.cameraPlaceholder = document.getElementById("camera-placeholder");
@@ -270,10 +271,13 @@ class SpatialHMIApp {
     this.hasActiveVisionHand = numHands > 0;
     const [ndcX, ndcY] = cmd.cursor_ndc || [0, 0];
 
-    // 1. Update Live Camera Perception Feed
-    if (packet.video_frame_b64 && this.cameraFeed) {
+    // 1. Update Full-Screen Camera Live Screen Feed
+    if (packet.video_frame_b64) {
       const srcUrl = "data:image/jpeg;base64," + packet.video_frame_b64;
-      if (this.cameraFeed.src !== srcUrl) {
+      if (this.cameraScreenFeed && this.cameraScreenFeed.src !== srcUrl) {
+        this.cameraScreenFeed.src = srcUrl;
+      }
+      if (this.cameraFeed && this.cameraFeed.src !== srcUrl) {
         this.cameraFeed.src = srcUrl;
       }
       if (this.cameraPlaceholder) this.cameraPlaceholder.classList.add("hidden");

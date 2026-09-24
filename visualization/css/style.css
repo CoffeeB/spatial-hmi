@@ -26,9 +26,39 @@ body, html {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: radial-gradient(circle at 50% 50%, #080f1e 0%, #03050a 100%);
+  background: #03050a;
   font-family: var(--font-sans);
   color: var(--text-main);
+}
+
+/* Full-Screen Camera Viewport */
+.camera-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 0;
+  overflow: hidden;
+  background: #000000;
+}
+
+.camera-screen-feed {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  filter: brightness(0.88) contrast(1.15);
+}
+
+.camera-vignette {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  box-shadow: inset 0 0 100px rgba(0, 0, 0, 0.7);
+  pointer-events: none;
 }
 
 #canvas-container {
@@ -37,7 +67,7 @@ body, html {
   left: 0;
   width: 100%;
   height: 100%;
-  z-index: 1;
+  z-index: 2;
   pointer-events: auto;
 }
 
