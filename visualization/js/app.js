@@ -13,21 +13,17 @@ class SpatialHMIApp {
     this.actionLabel = document.getElementById("action-label");
     this.gesturePrompt = document.getElementById("gesture-prompt");
 
-    // Camera Preview Elements
-    this.cameraContainer = document.getElementById("camera-container");
-    this.cameraFeed = document.getElementById("camera-feed");
-    this.cameraPlaceholder = document.getElementById("camera-placeholder");
-    this.cameraFeedOverlay = document.getElementById("camera-feed-overlay");
-    this.cameraHandCount = document.getElementById("camera-hand-count");
-    this.camGestureBadge = document.getElementById("cam-gesture-badge");
-    this.camPinchBar = document.getElementById("cam-pinch-bar");
-    this.cameraToggleBtn = document.getElementById("camera-toggle-btn");
+    // Full-Screen AR Camera Feed Element
+    this.arCameraFeed = document.getElementById("ar-camera-feed");
+
+    // Cluster Card Elements
+    this.clusterCard = document.getElementById("cluster-card");
+    this.clusterCloseBtn = document.getElementById("cluster-close-btn");
 
     // Recording Elements
     this.recordBtn = document.getElementById("record-btn");
     this.recordBtnText = document.getElementById("record-btn-text");
     this.exportBtn = document.getElementById("export-btn");
-    this.recordingBanner = document.getElementById("recording-banner");
     this.recordingStatsText = document.getElementById("recording-stats-text");
     this.telemetryRecFrames = document.getElementById("telemetry-rec-frames");
     this.telemetryRecSize = document.getElementById("telemetry-rec-size");
@@ -41,8 +37,8 @@ class SpatialHMIApp {
     this._initThree();
     this._initGlobeAndNodes();
     this._initSubsystems();
+    this._initClusterHandlers();
     this._initRecordingHandlers();
-    this._initCameraControls();
     this._initKeyboardShortcuts();
     this._initWebSocket();
     this._initFallbackMouseControls();
@@ -54,7 +50,6 @@ class SpatialHMIApp {
 
   _initThree() {
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.FogExp2(0x07090e, 0.035);
 
     this.camera = new THREE.PerspectiveCamera(
       45,
@@ -62,32 +57,34 @@ class SpatialHMIApp {
       0.1,
       1000
     );
-    this.targetCameraDistance = 7.0;
-    this.currentCameraDistance = 7.0;
+    this.targetCameraDistance = 6.8;
+    this.currentCameraDistance = 6.8;
     this.camera.position.set(0, 0, this.currentCameraDistance);
 
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    // Transparent WebGL Renderer for AR Hologram overlay
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    this.renderer.setClearColor(0x000000, 0.0);
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.1;
+    this.renderer.toneMappingExposure = 1.2;
     this.container.appendChild(this.renderer.domElement);
 
-    // Lighting setup
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+    // Hologram Lighting
+    const ambientLight = new THREE.AmbientLight(0x00f0ff, 0.6);
     this.scene.add(ambientLight);
 
-    const dirLight1 = new THREE.DirectionalLight(0x00f0ff, 1.6);
+    const dirLight1 = new THREE.DirectionalLight(0x00f0ff, 2.0);
     dirLight1.position.set(5, 4, 6);
     this.scene.add(dirLight1);
 
-    const dirLight2 = new THREE.DirectionalLight(0x3b82f6, 1.0);
+    const dirLight2 = new THREE.DirectionalLight(0x38bdf8, 1.2);
     dirLight2.position.set(-6, -3, 4);
     this.scene.add(dirLight2);
   }
 
   _initGlobeAndNodes() {
-    this.globe = new InteractiveGlobe(this.scene, 2.4);
+    this.globe = new InteractiveGlobe(this.scene, 2.3);
     this.nodeManager = new SpatialNodeManager(this.globe);
   }
 
@@ -98,10 +95,10 @@ class SpatialHMIApp {
     this.hasActiveVisionHand = false;
   }
 
-  _initCameraControls() {
-    if (this.cameraToggleBtn) {
-      this.cameraToggleBtn.addEventListener("click", () => {
-        this.cameraContainer.classList.toggle("expanded");
+  _initClusterHandlers() {
+    if (this.clusterCloseBtn) {
+      this.clusterCloseBtn.addEventListener("click", () => {
+        this.nodeManager.collapseCluster();
       });
     }
   }
@@ -113,8 +110,8 @@ class SpatialHMIApp {
         this.debugOverlay.toggle();
       } else if (key === "r") {
         this._toggleRecording();
-      } else if (key === "c") {
-        this.cameraContainer.classList.toggle("expanded");
+      } else if (e.key === "Escape") {
+        this.nodeManager.collapseCluster();
       }
     });
   }
@@ -136,7 +133,7 @@ class SpatialHMIApp {
       this.recordStartTime = Date.now();
       this.recordBtn.classList.add("recording");
       this.recordBtnText.textContent = "STOP RECORDING";
-      this.recordingBanner.classList.remove("hidden");
+      if (this.recordingBanner) this.recordingBanner.classList.remove("hidden");
       this.exportBtn.classList.add("hidden");
 
       this.recordingTimerId = setInterval(() => {
@@ -144,7 +141,9 @@ class SpatialHMIApp {
         const mins = String(Math.floor(elapsedSec / 60)).padStart(2, "0");
         const secs = String(elapsedSec % 60).padStart(2, "0");
         const frameCount = this.recordedPackets.length;
-        this.recordingStatsText.textContent = `REC: ${mins}:${secs} | ${frameCount} frames`;
+        if (this.recordingStatsText) {
+          this.recordingStatsText.textContent = `REC: ${mins}:${secs} | ${frameCount} frames`;
+        }
         if (this.telemetryRecFrames) {
           this.telemetryRecFrames.textContent = frameCount;
           const kbSize = (JSON.stringify(this.recordedPackets).length / 1024).toFixed(1);
@@ -157,7 +156,7 @@ class SpatialHMIApp {
       clearInterval(this.recordingTimerId);
       this.recordBtn.classList.remove("recording");
       this.recordBtnText.textContent = "START RECORDING";
-      this.recordingBanner.classList.add("hidden");
+      if (this.recordingBanner) this.recordingBanner.classList.add("hidden");
 
       if (this.recordedPackets.length > 0) {
         this.exportBtn.classList.remove("hidden");
@@ -255,21 +254,12 @@ class SpatialHMIApp {
     this.hasActiveVisionHand = numHands > 0;
     const [ndcX, ndcY] = cmd.cursor_ndc || [0, 0];
 
-    // 1. Update Camera Perception Live Feed
-    if (packet.video_frame_b64) {
-      if (this.cameraFeed.src !== "data:image/jpeg;base64," + packet.video_frame_b64) {
-        this.cameraFeed.src = "data:image/jpeg;base64," + packet.video_frame_b64;
+    // 1. Update Full-Screen AR Camera Perception Live Feed
+    if (packet.video_frame_b64 && this.arCameraFeed) {
+      const srcUrl = "data:image/jpeg;base64," + packet.video_frame_b64;
+      if (this.arCameraFeed.src !== srcUrl) {
+        this.arCameraFeed.src = srcUrl;
       }
-      if (this.cameraPlaceholder) this.cameraPlaceholder.classList.add("hidden");
-      if (this.cameraFeedOverlay) this.cameraFeedOverlay.classList.remove("hidden");
-    }
-
-    if (this.cameraHandCount) {
-      this.cameraHandCount.textContent = numHands === 1 ? "1 HAND" : `${numHands} HANDS`;
-    }
-
-    if (this.camGestureBadge) {
-      this.camGestureBadge.textContent = packet.active_gesture || "NONE";
     }
 
     // 2. Update Debug Overlay
@@ -280,28 +270,50 @@ class SpatialHMIApp {
 
     // 4. Update Spatial Cursor & Pinch Meter
     const pinchConf = packet.hands && packet.hands[0] ? packet.hands[0].pinch_confidence : 0;
-    if (this.camPinchBar) {
-      this.camPinchBar.style.width = `${Math.round(pinchConf * 100)}%`;
-    }
     this.cursor.updateFromNDC(ndcX, ndcY, state, cmd.is_pinch_active, pinchConf);
 
-    // 5. Spatial Ray-Casting for Node Hover
+    // 5. Spatial Ray-Casting for Node Hover & Pointing
     const ndcVector = new THREE.Vector2(ndcX, ndcY);
     const hoveredNode = this.nodeManager.testRaycast(this.camera, ndcVector);
+
+    // If actively pointing at a node, auto-select & expand its sub-node cluster
+    if (packet.active_gesture === "POINT" && hoveredNode) {
+      if (hoveredNode.isSubnode) {
+        this.nodeManager.selectSubnode(hoveredNode);
+        this.activeManipulatedNode = hoveredNode;
+        this.actionLabel.textContent = `Pointing at Sub-Node: ${hoveredNode.label}`;
+      } else if (this.nodeManager.expandedCluster !== hoveredNode) {
+        this.nodeManager.selectNode(hoveredNode);
+        this.activeManipulatedNode = hoveredNode;
+        this.actionLabel.textContent = `Pointing: Expanded ${hoveredNode.label}`;
+        this.gesturePrompt.textContent = "Cluster opened! Pinch to manipulate sub-nodes, or spread hands to zoom.";
+      }
+    }
 
     // 6. Execute High-Level Spatial Commands
     switch (cmd.command_type) {
       case "HOVER":
-        this.actionLabel.textContent = hoveredNode ? `Hovering: ${hoveredNode.label}` : "Exploring Space";
-        this.gesturePrompt.textContent = "Make a FIST to rotate the globe, or PINCH to manipulate nodes";
+        if (hoveredNode) {
+          this.actionLabel.textContent = hoveredNode.isSubnode
+            ? `Hovering Sub-Node: ${hoveredNode.label} (${hoveredNode.metric})`
+            : `Hovering Cluster: ${hoveredNode.label}`;
+          this.gesturePrompt.textContent = "POINT at node to zoom into cluster, or PINCH to manipulate.";
+        } else {
+          this.actionLabel.textContent = "Exploring Hologram Space";
+          this.gesturePrompt.textContent = "Point at glowing nodes to zoom into clusters, or make a fist to rotate.";
+        }
         break;
 
       case "SELECT":
         if (hoveredNode) {
-          this.nodeManager.selectNode(hoveredNode);
+          if (hoveredNode.isSubnode) {
+            this.nodeManager.selectSubnode(hoveredNode);
+          } else {
+            this.nodeManager.selectNode(hoveredNode);
+          }
           this.activeManipulatedNode = hoveredNode;
           this.actionLabel.textContent = `Selected: ${hoveredNode.label}`;
-          this.gesturePrompt.textContent = "Node locked. PINCH and move hand to reposition in 3D orbit.";
+          this.gesturePrompt.textContent = "Node locked. PINCH and drag to reposition in 3D orbit.";
         }
         break;
 
@@ -309,16 +321,16 @@ class SpatialHMIApp {
         if (cmd.delta_rotation) {
           const [deltaYaw, deltaPitch] = cmd.delta_rotation;
           this.globe.applyRotationDelta(deltaYaw, deltaPitch);
-          this.actionLabel.textContent = "Manipulating Globe Rotation";
-          this.gesturePrompt.textContent = "Move closed fist across screen to spin globe. Open palm to release.";
+          this.actionLabel.textContent = "Rotating Hologram";
+          this.gesturePrompt.textContent = "Move closed fist across screen to rotate. Open hand to release.";
         }
         break;
 
       case "SCALE_OBJECT":
         if (cmd.delta_scale) {
-          this.targetCameraDistance = Math.max(4.0, Math.min(12.0, this.targetCameraDistance / cmd.delta_scale));
-          this.actionLabel.textContent = "Bimanual Zooming";
-          this.gesturePrompt.textContent = "Spread two hands apart to zoom in, bring together to zoom out.";
+          this.targetCameraDistance = Math.max(3.6, Math.min(11.0, this.targetCameraDistance / cmd.delta_scale));
+          this.actionLabel.textContent = "Spatial Zooming";
+          this.gesturePrompt.textContent = "Spread two hands apart to zoom in, bring closer to zoom out.";
         }
         break;
 
@@ -326,24 +338,28 @@ class SpatialHMIApp {
         if (this.activeManipulatedNode && cmd.delta_translation) {
           const [dx, dy] = cmd.delta_translation;
           this.nodeManager.translateNode(this.activeManipulatedNode, dx, dy);
-          this.actionLabel.textContent = `Translating: ${this.activeManipulatedNode.label}`;
-          this.gesturePrompt.textContent = "Holding node. Release pinch to anchor new location.";
+          this.actionLabel.textContent = `Manipulating: ${this.activeManipulatedNode.label}`;
+          this.gesturePrompt.textContent = "Holding node. Release pinch to anchor new spatial position.";
         } else if (hoveredNode) {
           this.activeManipulatedNode = hoveredNode;
-          this.nodeManager.selectNode(hoveredNode);
+          if (hoveredNode.isSubnode) {
+            this.nodeManager.selectSubnode(hoveredNode);
+          } else {
+            this.nodeManager.selectNode(hoveredNode);
+          }
         }
         break;
 
       case "RELEASE_OBJECT":
         this.activeManipulatedNode = null;
         this.actionLabel.textContent = "Interaction Released";
-        this.gesturePrompt.textContent = "Hand opened. Gesture released.";
+        this.gesturePrompt.textContent = "Hand opened. Hologram steady.";
         break;
 
       case "IDLE":
       default:
         this.actionLabel.textContent = "Awaiting Hand Gesture...";
-        this.gesturePrompt.textContent = "Show your hand to the camera to begin spatial interaction";
+        this.gesturePrompt.textContent = "Show your hand to the camera to interact with holographic nodes";
         break;
     }
   }

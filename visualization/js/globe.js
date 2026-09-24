@@ -15,45 +15,51 @@ class InteractiveGlobe {
     this.currentRotationY = 0;
     this.currentRotationX = 0;
     this.autoRotate = true;
-    this.autoRotateSpeed = 0.0015;
+    this.autoRotateSpeed = 0.0012;
 
-    this._initGlobeMesh();
+    this._initHolographicGlobe();
     this._initGraticuleRings();
     this._initAtmosphereGlow();
-    this._initStarfield();
   }
 
-  _initGlobeMesh() {
-    // 1. Procedural Spherical Surface with custom shader material
-    const sphereGeometry = new THREE.SphereGeometry(this.radius, 64, 64);
-
-    // Deep space navy base with subtle Fresnel glow
-    const sphereMaterial = new THREE.MeshStandardMaterial({
-      color: 0x091428,
-      metalness: 0.85,
-      roughness: 0.35,
-      emissive: 0x030814,
-      emissiveIntensity: 0.6,
-      wireframe: false,
+  _initHolographicGlobe() {
+    // 1. Translucent Holographic Inner Core
+    const coreGeometry = new THREE.SphereGeometry(this.radius * 0.99, 48, 48);
+    const coreMaterial = new THREE.MeshBasicMaterial({
+      color: 0x002244,
+      transparent: true,
+      opacity: 0.35,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
     });
+    this.coreMesh = new THREE.Mesh(coreGeometry, coreMaterial);
+    this.globeGroup.add(this.coreMesh);
 
-    this.sphereMesh = new THREE.Mesh(sphereGeometry, sphereMaterial);
-    this.globeGroup.add(this.sphereMesh);
+    // 2. Holographic Latitude & Longitude Wireframe Cage
+    const wireGeo = new THREE.SphereGeometry(this.radius, 24, 18);
+    const wireMat = new THREE.MeshBasicMaterial({
+      color: 0x00f0ff,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.22,
+      blending: THREE.AdditiveBlending,
+    });
+    this.wireMesh = new THREE.Mesh(wireGeo, wireMat);
+    this.globeGroup.add(this.wireMesh);
 
-    // 2. High-contrast continent dot matrix overlay
+    // 3. High-density Glowing Hologram Point Cloud Continents
     this._initProceduralContinents();
   }
 
   _initProceduralContinents() {
-    const pointCount = 2800;
+    const pointCount = 3600;
     const positions = new Float32Array(pointCount * 3);
     const colors = new Float32Array(pointCount * 3);
 
     const baseColor = new THREE.Color(0x00f0ff);
-    const altColor = new THREE.Color(0x3b82f6);
+    const altColor = new THREE.Color(0x38bdf8);
 
     for (let i = 0; i < pointCount; i++) {
-      // Golden spiral distribution across sphere
       const phi = Math.acos(1 - 2 * (i + 0.5) / pointCount);
       const theta = Math.PI * (1 + 5**0.5) * i;
 
@@ -77,10 +83,10 @@ class InteractiveGlobe {
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
     const material = new THREE.PointsMaterial({
-      size: 0.032,
+      size: 0.045,
       vertexColors: true,
       transparent: true,
-      opacity: 0.75,
+      opacity: 0.88,
       blending: THREE.AdditiveBlending,
     });
 
@@ -89,23 +95,36 @@ class InteractiveGlobe {
   }
 
   _initGraticuleRings() {
-    // Equator ring
-    const equatorGeo = new THREE.RingGeometry(this.radius * 1.005, this.radius * 1.015, 64);
+    // Equator Hologram Ring
+    const equatorGeo = new THREE.RingGeometry(this.radius * 1.01, this.radius * 1.025, 64);
     const ringMat = new THREE.MeshBasicMaterial({
       color: 0x00f0ff,
       side: THREE.DoubleSide,
       transparent: true,
-      opacity: 0.25,
-      wireframe: true,
+      opacity: 0.45,
+      blending: THREE.AdditiveBlending,
     });
-    const equator = new THREE.Mesh(equatorGeo, ringMat);
-    equator.rotation.x = Math.PI / 2;
-    this.globeGroup.add(equator);
+    this.equatorRing = new THREE.Mesh(equatorGeo, ringMat);
+    this.equatorRing.rotation.x = Math.PI / 2;
+    this.globeGroup.add(this.equatorRing);
+
+    // Orbital Telemetry Horizon Ring
+    const orbitGeo = new THREE.RingGeometry(this.radius * 1.25, this.radius * 1.26, 64);
+    const orbitMat = new THREE.MeshBasicMaterial({
+      color: 0x38bdf8,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.25,
+      blending: THREE.AdditiveBlending,
+    });
+    this.orbitRing = new THREE.Mesh(orbitGeo, orbitMat);
+    this.orbitRing.rotation.x = Math.PI / 3;
+    this.globeGroup.add(this.orbitRing);
   }
 
   _initAtmosphereGlow() {
-    // Outer atmospheric glow shell
-    const glowGeo = new THREE.SphereGeometry(this.radius * 1.15, 48, 48);
+    // Outer Holographic Rim Glow Shell
+    const glowGeo = new THREE.SphereGeometry(this.radius * 1.12, 48, 48);
     const glowMat = new THREE.ShaderMaterial({
       vertexShader: `
         varying vec3 vNormal;
@@ -117,8 +136,8 @@ class InteractiveGlobe {
       fragmentShader: `
         varying vec3 vNormal;
         void main() {
-          float intensity = pow(0.65 - dot(vNormal, vec3(0, 0, 1.0)), 2.8);
-          gl_FragColor = vec4(0.0, 0.94, 1.0, 1.0) * intensity * 0.7;
+          float intensity = pow(0.70 - dot(vNormal, vec3(0, 0, 1.0)), 2.5);
+          gl_FragColor = vec4(0.0, 0.94, 1.0, 1.0) * intensity * 0.85;
         }
       `,
       blending: THREE.AdditiveBlending,
@@ -127,30 +146,7 @@ class InteractiveGlobe {
     });
 
     this.atmosphereGlow = new THREE.Mesh(glowGeo, glowMat);
-    this.scene.add(this.atmosphereGlow);
-  }
-
-  _initStarfield() {
-    const starCount = 1200;
-    const starGeo = new THREE.BufferGeometry();
-    const starPos = new Float32Array(starCount * 3);
-
-    for (let i = 0; i < starCount * 3; i += 3) {
-      starPos[i] = (Math.random() - 0.5) * 80;
-      starPos[i + 1] = (Math.random() - 0.5) * 80;
-      starPos[i + 2] = (Math.random() - 0.5) * 80;
-    }
-
-    starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
-    const starMat = new THREE.PointsMaterial({
-      color: 0xffffff,
-      size: 0.08,
-      transparent: true,
-      opacity: 0.5,
-    });
-
-    const starfield = new THREE.Points(starGeo, starMat);
-    this.scene.add(starfield);
+    this.globeGroup.add(this.atmosphereGlow);
   }
 
   applyRotationDelta(deltaYaw, deltaPitch) {
@@ -168,11 +164,15 @@ class InteractiveGlobe {
     }
 
     // Smooth spherical interpolation (lerp)
-    const lerpFactor = 0.12;
+    const lerpFactor = 0.14;
     this.currentRotationY += (this.targetRotationY - this.currentRotationY) * lerpFactor;
     this.currentRotationX += (this.targetRotationX - this.currentRotationX) * lerpFactor;
 
     this.globeGroup.rotation.y = this.currentRotationY;
     this.globeGroup.rotation.x = this.currentRotationX;
+
+    if (this.orbitRing) {
+      this.orbitRing.rotation.z += deltaTime * 0.15;
+    }
   }
 }

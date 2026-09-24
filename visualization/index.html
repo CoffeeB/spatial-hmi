@@ -9,7 +9,15 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
-  <!-- 3D Canvas Viewport -->
+  <!-- Full-Screen AR Camera Passthrough Viewport -->
+  <div id="ar-viewport" class="ar-viewport">
+    <img id="ar-camera-feed" class="ar-camera-feed" alt="AR Spatial Passthrough" />
+    <div class="ar-grid-overlay"></div>
+    <div class="ar-scanlines"></div>
+    <div class="ar-vignette"></div>
+  </div>
+
+  <!-- 3D Hologram Canvas Viewport -->
   <div id="canvas-container"></div>
 
   <!-- Spatial Hand Cursor -->
@@ -28,7 +36,7 @@
         <div class="brand-dot"></div>
         <div class="brand-text">
           <h1>SPATIAL HMI</h1>
-          <span>VISION INTERACTION ENGINE</span>
+          <span>AUGMENTED REALITY HOLOGRAM</span>
         </div>
       </div>
 
@@ -58,46 +66,27 @@
     <!-- Center HUD Action Text -->
     <div class="center-hud">
       <div id="action-label" class="action-label">Awaiting Hand Gesture...</div>
-      <div id="gesture-prompt" class="gesture-prompt">Show your hand to the camera to begin spatial interaction</div>
+      <div id="gesture-prompt" class="gesture-prompt">Point your finger at any glowing node or make a fist to rotate the hologram</div>
     </div>
 
-    <!-- Live Camera Perception Preview (Bottom Left) -->
-    <div id="camera-container" class="camera-container">
-      <div class="camera-header">
-        <div class="camera-title-group">
-          <div id="camera-live-dot" class="live-dot"></div>
-          <span class="camera-title">LIVE PERCEPTION FEED</span>
+    <!-- Hierarchical Cluster Telemetry HUD Card (Floating Hologram Card) -->
+    <div id="cluster-card" class="cluster-card hidden">
+      <div class="cluster-header">
+        <div class="cluster-badge-group">
+          <span class="cluster-badge">HIERARCHICAL CLUSTER</span>
+          <span id="cluster-node-count" class="cluster-count">4 SUB-NODES</span>
         </div>
-        <div class="camera-controls">
-          <span id="camera-hand-count" class="camera-hand-tag">0 HANDS</span>
-          <button id="camera-toggle-btn" class="camera-toggle-btn" title="Toggle Preview Size">&#x26F6;</button>
-        </div>
+        <button id="cluster-close-btn" class="cluster-close-btn" title="Collapse Cluster">&times;</button>
+      </div>
+      <h3 id="cluster-title">Alpha Station</h3>
+      <p id="cluster-desc" class="cluster-desc">Primary Orbital Relay Network</p>
+      
+      <div id="subnodes-list" class="subnodes-list">
+        <!-- Dynamic Sub-Nodes -->
       </div>
       
-      <div class="camera-feed-wrapper">
-        <img id="camera-feed" class="camera-feed" alt="Webcam Perception Stream" />
-        <div id="camera-placeholder" class="camera-placeholder">
-          <div class="placeholder-spinner"></div>
-          <div class="placeholder-text">WAITING FOR CAMERA STREAM</div>
-          <div class="placeholder-subtext">Run Python HMI Server (scripts/run_hmi_server.py)</div>
-        </div>
-
-        <!-- Over-the-video telemetry overlay -->
-        <div id="camera-feed-overlay" class="camera-feed-overlay hidden">
-          <div id="cam-gesture-badge" class="cam-gesture-badge">NONE</div>
-          <div class="pinch-meter-container">
-            <span class="pinch-meter-label">PINCH:</span>
-            <div class="pinch-meter-bg">
-              <div id="cam-pinch-bar" class="pinch-meter-fill"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Recording Active Indicator Banner -->
-      <div id="recording-banner" class="recording-banner hidden">
-        <span class="banner-pulse"></span>
-        <span id="recording-stats-text">REC: 00:00 | 0 frames</span>
+      <div class="cluster-footer">
+        <span class="cluster-hint">&#x2190; Open palm or click [Collapse] to return to Global view</span>
       </div>
     </div>
 
@@ -106,34 +95,34 @@
       <div class="interaction-legend">
         <div class="legend-item">
           <span class="legend-gesture">POINT</span>
-          <span class="legend-action">Select Node</span>
+          <span class="legend-action">Select & Expand Node</span>
         </div>
         <div class="legend-divider"></div>
         <div class="legend-item">
           <span class="legend-gesture">GRAB + DRAG</span>
-          <span class="legend-action">Rotate Globe</span>
+          <span class="legend-action">Rotate Hologram</span>
         </div>
         <div class="legend-divider"></div>
         <div class="legend-item">
           <span class="legend-gesture">PINCH + DRAG</span>
-          <span class="legend-action">Translate Node</span>
+          <span class="legend-action">Manipulate Sub-Node</span>
         </div>
         <div class="legend-divider"></div>
         <div class="legend-item">
           <span class="legend-gesture">2-HAND SPREAD</span>
-          <span class="legend-action">Zoom In/Out</span>
+          <span class="legend-action">Zoom In Cluster</span>
         </div>
         <div class="legend-divider"></div>
         <div class="legend-item">
           <span class="legend-gesture">OPEN PALM</span>
-          <span class="legend-action">Release / Cancel</span>
+          <span class="legend-action">Release / Collapse</span>
         </div>
       </div>
 
       <div class="quick-hints">
         <span class="hint-key">[D]</span> Research Telemetry HUD &nbsp;|&nbsp;
         <span class="hint-key">[R]</span> Toggle Recording &nbsp;|&nbsp;
-        <span class="hint-key">[C]</span> Toggle Camera Size
+        <span class="hint-key">[ESC]</span> Collapse Cluster
       </div>
     </footer>
   </div>
