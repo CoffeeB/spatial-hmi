@@ -24,7 +24,6 @@ class SpatialNodeManager {
 
     this.raycaster = new THREE.Raycaster();
     this._initSampleNodes();
-    this._initConnectionArcs();
   }
 
   _initSampleNodes() {
@@ -102,11 +101,14 @@ class SpatialNodeManager {
       },
     ];
 
-    nodeData.forEach((data) => {
-      const node = this._createNodeMesh(data);
-      this.nodes.push(node);
-      this.nodesGroup.add(node.mesh);
-    });
+    // Only render nodes that are non-empty and have further importance (sub-nodes)
+    nodeData
+      .filter((data) => data.subnodes && data.subnodes.length > 0)
+      .forEach((data) => {
+        const node = this._createNodeMesh(data);
+        this.nodes.push(node);
+        this.nodesGroup.add(node.mesh);
+      });
   }
 
   _latLonToVector3(lat, lon, radius) {
@@ -132,7 +134,6 @@ class SpatialNodeManager {
       color: data.color,
       transparent: true,
       opacity: 0.9,
-      blending: THREE.AdditiveBlending,
     });
     const coreMesh = new THREE.Mesh(coreGeo, coreMat);
     group.add(coreMesh);
@@ -144,7 +145,6 @@ class SpatialNodeManager {
       side: THREE.DoubleSide,
       transparent: true,
       opacity: 0.8,
-      blending: THREE.AdditiveBlending,
     });
     const ringMesh = new THREE.Mesh(ringGeo, ringMat);
     ringMesh.lookAt(pos.clone().multiplyScalar(2));
@@ -167,39 +167,18 @@ class SpatialNodeManager {
     };
   }
 
-  _initConnectionArcs() {
-    const curveMat = new THREE.LineBasicMaterial({
-      color: 0x00f0ff,
-      transparent: true,
-      opacity: 0.35,
-      blending: THREE.AdditiveBlending,
-    });
-
-    for (let i = 0; i < this.nodes.length - 1; i++) {
-      const p1 = this.nodes[i].basePos;
-      const p2 = this.nodes[i + 1].basePos;
-      const mid = p1.clone().add(p2).multiplyScalar(0.5).normalize().multiplyScalar(this.globe.radius * 1.35);
-
-      const curve = new THREE.QuadraticBezierCurve3(p1, mid, p2);
-      const points = curve.getPoints(32);
-      const curveGeo = new THREE.BufferGeometry().setFromPoints(points);
-      const curveMesh = new THREE.Line(curveGeo, curveMat);
-      this.nodesGroup.add(curveMesh);
-    }
-  }
-
   expandCluster(node) {
     if (this.expandedCluster === node) return;
     this.collapseCluster();
 
     this.expandedCluster = node;
     this.subnodes = [];
+    this.activeClusterLinks = [];
 
     const lineMat = new THREE.LineBasicMaterial({
-      color: 0x00f0ff,
+      color: node.color || 0x00f0ff,
       transparent: true,
-      opacity: 0.6,
-      blending: THREE.AdditiveBlending,
+      opacity: 0.65,
     });
 
     node.subnodes.forEach((sub, idx) => {
@@ -215,21 +194,21 @@ class SpatialNodeManager {
       // Sub-node Mesh
       const subCoreGeo = new THREE.SphereGeometry(0.045, 12, 12);
       const subCoreMat = new THREE.MeshBasicMaterial({
-        color: 0x00f0ff,
+        color: node.color || 0x00f0ff,
         transparent: true,
         opacity: 0.95,
-        blending: THREE.AdditiveBlending,
       });
       const subCore = new THREE.Mesh(subCoreGeo, subCoreMat);
       subGroup.add(subCore);
 
-      // Connecting energy line
+      // Connecting energy line from Parent Node (0,0,0) to Sub-Node
       const lineGeo = new THREE.BufferGeometry().setFromPoints([
         new THREE.Vector3(0, 0, 0),
         new THREE.Vector3(...sub.offset).multiplyScalar(1.6),
       ]);
       const lineMesh = new THREE.Line(lineGeo, lineMat);
       node.mesh.add(lineMesh);
+      this.activeClusterLinks.push(lineMesh);
 
       const subObj = {
         id: sub.id,
@@ -249,6 +228,23 @@ class SpatialNodeManager {
       this.clusterGroup.add(subGroup);
     });
 
+    // Links between adjacent active sub-nodes connecting through cluster
+    for (let i = 0; i < node.subnodes.length; i++) {
+      const nextIdx = (i + 1) % node.subnodes.length;
+      const pA = new THREE.Vector3(...node.subnodes[i].offset).multiplyScalar(1.6);
+      const pB = new THREE.Vector3(...node.subnodes[nextIdx].offset).multiplyScalar(1.6);
+
+      const interLineGeo = new THREE.BufferGeometry().setFromPoints([pA, pB]);
+      const interLineMat = new THREE.LineBasicMaterial({
+        color: node.color || 0x00f0ff,
+        transparent: true,
+        opacity: 0.35,
+      });
+      const interLineMesh = new THREE.Line(interLineGeo, interLineMat);
+      node.mesh.add(interLineMesh);
+      this.activeClusterLinks.push(interLineMesh);
+    }
+
     // Update HUD Cluster Card
     this._updateClusterHUD(node);
   }
@@ -256,10 +252,14 @@ class SpatialNodeManager {
   collapseCluster() {
     if (!this.expandedCluster) return;
 
+    if (this.activeClusterLinks && this.expandedCluster.mesh) {
+      this.activeClusterLinks.forEach((link) => {
+        this.expandedCluster.mesh.remove(link);
+      });
+    }
+    this.activeClusterLinks = [];
+
     this.subnodes.forEach((sub) => {
-      if (sub.lineMesh && sub.parent.mesh) {
-        sub.parent.mesh.remove(sub.lineMesh);
-      }
       this.clusterGroup.remove(sub.group);
     });
 
