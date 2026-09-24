@@ -85,5 +85,19 @@ def test_interaction_engine_two_hands_bimanual_nav():
 
     cmd2, _, _ = engine.process_hands([hand1_next, hand2_next], timestamp=1.1)
     assert cmd2.command_type == SpatialCommandType.BIMANUAL_NAV
-    assert cmd2.delta_scale > 1.0  # Hands coming together zooms in (scale > 1.0)
+    # Hands coming TOGETHER -> zoom OUT (scale < 1.0)
+    assert cmd2.delta_scale < 1.0, f"Expected scale < 1.0 (zoom out) when hands come together, got {cmd2.delta_scale}"
 
+    # Step 3: Hands move APART from their current position (distance increasing)
+    pts1_apart = pts1_together.copy()
+    pts1_apart[:, 0] -= 0.12  # move back left (further from center), large enough to clear dead-zone
+    pts2_apart = pts2_together.copy()
+    pts2_apart[:, 0] += 0.12  # move back right (further from center)
+
+    hand1_apart = build_hand_state(pts1_apart, hand_id=0)
+    hand2_apart = build_hand_state(pts2_apart, hand_id=1)
+
+    cmd3, _, _ = engine.process_hands([hand1_apart, hand2_apart], timestamp=1.2)
+    assert cmd3.command_type == SpatialCommandType.BIMANUAL_NAV
+    # Hands moving APART -> zoom IN (scale > 1.0)
+    assert cmd3.delta_scale > 1.0, f"Expected scale > 1.0 (zoom in) when hands move apart, got {cmd3.delta_scale}"

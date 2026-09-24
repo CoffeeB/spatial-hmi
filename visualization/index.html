@@ -18,6 +18,9 @@
   <!-- 3D Hologram Spatial Canvas Viewport (Nodes hover above camera) -->
   <div id="canvas-container"></div>
 
+  <!-- Developer Debug Skeleton Canvas (Visible when 'D' is pressed) -->
+  <canvas id="debug-skeleton-canvas" class="debug-skeleton-canvas hidden"></canvas>
+
   <!-- Spatial Hand Cursor -->
   <div id="spatial-cursor">
     <div class="cursor-ring">
@@ -138,18 +141,18 @@
     </div>
 
     <div class="telemetry-row">
-      <span class="telemetry-label">Pipeline FPS:</span>
-      <span id="fps-value" class="telemetry-value">60.0</span>
+      <span class="telemetry-label">Primary Hand:</span>
+      <span id="primary-hand-val" class="telemetry-value" style="color:#10b981;">Right</span>
     </div>
 
     <div class="telemetry-row">
-      <span class="telemetry-label">End-to-End Latency:</span>
-      <span id="latency-value" class="telemetry-value">24.2 ms</span>
+      <span class="telemetry-label">Modifier Hand:</span>
+      <span id="modifier-hand-val" class="telemetry-value" style="color:#94a3b8;">None</span>
     </div>
 
     <div class="telemetry-row">
-      <span class="telemetry-label">Interaction State:</span>
-      <span id="state-value" class="telemetry-value">IDLE</span>
+      <span class="telemetry-label">Gesture Candidate:</span>
+      <span id="candidate-gesture-val" class="telemetry-value" style="color:#f59e0b;">NONE</span>
     </div>
 
     <div class="telemetry-row">
@@ -158,8 +161,23 @@
     </div>
 
     <div class="telemetry-row">
+      <span class="telemetry-label">Interaction State:</span>
+      <span id="state-value" class="telemetry-value">IDLE</span>
+    </div>
+
+    <div class="telemetry-row">
       <span class="telemetry-label">Active Command:</span>
       <span id="command-value" class="telemetry-value">IDLE</span>
+    </div>
+
+    <div class="telemetry-row">
+      <span class="telemetry-label">Pipeline FPS:</span>
+      <span id="fps-value" class="telemetry-value">60.0</span>
+    </div>
+
+    <div class="telemetry-row">
+      <span class="telemetry-label">Latency:</span>
+      <span id="latency-value" class="telemetry-value">24.2 ms</span>
     </div>
 
     <div class="telemetry-row">

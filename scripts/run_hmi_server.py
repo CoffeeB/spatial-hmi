@@ -132,6 +132,7 @@ def main():
                         hand_id=h.hand_id,
                         handedness=h.handedness,
                         palm_center=h.palm_center,
+                        palm_velocity=h.palm_velocity,
                         pinch_confidence=h.pinch_confidence,
                         detection_confidence=h.detection_confidence,
                         landmarks_normalized=norm_pts,
@@ -141,8 +142,8 @@ def main():
             # Compress annotated frame to base64 JPEG for browser PiP feed
             video_b64 = None
             if annotated_frame is not None and not args.synthetic:
-                small_frame = cv2.resize(annotated_frame, (320, 240), interpolation=cv2.INTER_AREA)
-                ret_enc, buf = cv2.imencode(".jpg", small_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 55])
+                small_frame = cv2.resize(annotated_frame, (640, 480), interpolation=cv2.INTER_AREA)
+                ret_enc, buf = cv2.imencode(".jpg", small_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 65])
                 if ret_enc:
                     import base64
                     video_b64 = base64.b64encode(buf).decode("ascii")
@@ -151,6 +152,9 @@ def main():
                 command=command,
                 intent_state=intent_ctx.state.value,
                 active_gesture=intent_ctx.active_gesture.value,
+                candidate_gesture=intent_ctx.candidate_gesture.value if hasattr(intent_ctx, "candidate_gesture") else "NONE",
+                dominant_hand=command.dominant_hand,
+                modifier_hand=command.modifier_hand,
                 intent_confidence=intent_ctx.intent_confidence,
                 hands=telemetry_hands,
                 fps=float(fps),

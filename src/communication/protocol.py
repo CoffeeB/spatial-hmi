@@ -1,5 +1,5 @@
 """
-WebSocket message schema and telemetry protocol definitions.
+WebSocket message schema and telemetry protocol definitions for Gestura v3.
 """
 
 from typing import Any, Dict, List, Optional, Tuple
@@ -13,6 +13,7 @@ class HandTelemetry(BaseModel):
     hand_id: int
     handedness: str
     palm_center: Tuple[float, float, float]
+    palm_velocity: Tuple[float, float, float] = (0.0, 0.0, 0.0)
     pinch_confidence: float
     detection_confidence: float
     landmarks_normalized: List[List[float]]  # List of [x, y, z] for 21 joints
@@ -21,11 +22,15 @@ class HandTelemetry(BaseModel):
 class HMIPacket(BaseModel):
     """
     Complete state packet broadcasted to connected WebGL/Three.js clients.
+    Exposes Gestura v3 confidence model, roles, and telemetry.
     """
     packet_type: str = "HMI_STATE_UPDATE"
     command: SpatialCommand
-    intent_state: str  # IDLE, OBSERVING, CANDIDATE, CONFIRMED, ACTIVE, RELEASING
+    intent_state: str  # IDLE, OBSERVING, CANDIDATE, CONFIRMED, ACTIVE, RELEASE
     active_gesture: str
+    candidate_gesture: Optional[str] = "NONE"
+    dominant_hand: Optional[str] = None    # "Right" or "Left"
+    modifier_hand: Optional[str] = None    # "Left" or "Right" or None
     intent_confidence: float
     hands: List[HandTelemetry] = []
     fps: float = 0.0

@@ -306,49 +306,166 @@ class SpatialNodeManager {
   testRaycast(camera, ndcCoords) {
     this.raycaster.setFromCamera(ndcCoords, camera);
 
-    // Test sub-nodes first if cluster expanded
+    let bestCandidate = null;
+    let bestDist = 0.28; // Generous magnetic hover radius in NDC (~15-18% of screen)
+
+    // 1. Check Sub-Nodes first if cluster is expanded
     if (this.subnodes.length > 0) {
       const subMeshes = this.subnodes.map((s) => s.coreMesh);
       const subHits = this.raycaster.intersectObjects(subMeshes, true);
       if (subHits.length > 0) {
-        const hitSubMesh = subHits[0].object;
-        const hoveredSub = this.subnodes.find((s) => s.coreMesh === hitSubMesh);
-        if (hoveredSub) {
-          this.selectSubnode(hoveredSub);
-          return hoveredSub;
+        bestCandidate = this.subnodes.find((s) => s.coreMesh === subHits[0].object);
+        bestDist = 0;
+      } else {
+        // Screen-space proximity test for sub-nodes
+        for (const sub of this.subnodes) {
+          const worldPos = new THREE.Vector3();
+          sub.group.getWorldPosition(worldPos);
+          const proj = worldPos.clone().project(camera);
+          if (proj.z < 1.0) {
+            const d = Math.hypot(proj.x - ndcCoords.x, proj.y - ndcCoords.y);
+            if (d < bestDist) {
+              bestDist = d;
+              bestCandidate = sub;
+            }
+          }
         }
       }
     }
 
-    // Test parent nodes
-    const meshes = this.nodes.map((n) => n.coreMesh);
-    const intersects = this.raycaster.intersectObjects(meshes, true);
+    // 2. Check Parent Nodes
+    if (!bestCandidate) {
+      const meshes = this.nodes.map((n) => n.coreMesh);
+      const intersects = this.raycaster.intersectObjects(meshes, true);
+      if (intersects.length > 0) {
+        bestCandidate = this.nodes.find((n) => n.coreMesh === intersects[0].object);
+      } else {
+        // Screen-space magnetic proximity on front-facing parent nodes
+        const camPos = camera.position.clone();
+        for (const node of this.nodes) {
+          const worldPos = new THREE.Vector3();
+          node.mesh.getWorldPosition(worldPos);
 
-    let newHover = null;
-    if (intersects.length > 0) {
-      const hitMesh = intersects[0].object;
-      newHover = this.nodes.find((n) => n.coreMesh === hitMesh);
+          // Vector from node to camera vs globe surface normal
+          const toCam = camPos.clone().sub(worldPos).normalize();
+          const normal = worldPos.clone().normalize();
+          if (normal.dot(toCam) > 0.02) {
+            const proj = worldPos.clone().project(camera);
+            if (proj.z < 1.0) {
+              const d = Math.hypot(proj.x - ndcCoords.x, proj.y - ndcCoords.y);
+              if (d < bestDist) {
+                bestDist = d;
+                bestCandidate = node;
+              }
+            }
+          }
+        }
+      }
     }
 
-    if (newHover !== this.hoveredNode) {
-      if (this.hoveredNode && !this.hoveredNode.isSelected) {
+    // Handle hover transitions
+    if (bestCandidate && bestCandidate.isSubnode) {
+      if (this.hoveredSubnode && this.hoveredSubnode !== bestCandidate && this.hoveredSubnode !== this.activeSubnode) {
+        this.hoveredSubnode.coreMesh.scale.set(1, 1, 1);
+      }
+      this.hoveredSubnode = bestCandidate;
+      this.hoveredSubnode.coreMesh.scale.set(1.5, 1.5, 1.5);
+      return bestCandidate;
+    } else {
+      if (this.hoveredSubnode && this.hoveredSubnode !== this.activeSubnode) {
+        this.hoveredSubnode.coreMesh.scale.set(1, 1, 1);
+        this.hoveredSubnode = null;
+      }
+    }
+
+    if (bestCandidate !== this.hoveredNode) {
+      if (this.hoveredNode && !this.hoveredNode.isSelected && !this.hoveredNode.isHeld) {
         this.hoveredNode.coreMesh.scale.set(1, 1, 1);
+        this.hoveredNode.coreMesh.material.color.setHex(this.hoveredNode.color);
       }
-      this.hoveredNode = newHover;
-      if (this.hoveredNode) {
-        this.hoveredNode.coreMesh.scale.set(1.5, 1.5, 1.5);
+      this.hoveredNode = bestCandidate;
+      if (this.hoveredNode && !this.hoveredNode.isSelected) {
+        this.hoveredNode.coreMesh.scale.set(1.6, 1.6, 1.6);
       }
     }
 
-    return this.hoveredNode;
+    return bestCandidate;
+  }
+
+  setNodeHolding(node, isHeld) {
+    if (!node) return;
+    node.isHeld = isHeld;
+    if (node.isSubnode) {
+      if (isHeld) {
+        node.coreMesh.material.color.setHex(0xffffff);
+        node.coreMesh.scale.set(1.9, 1.9, 1.9);
+      } else {
+        node.coreMesh.material.color.setHex(0x00f0ff);
+        node.coreMesh.scale.set(1.0, 1.0, 1.0);
+      }
+    } else {
+      if (isHeld) {
+        node.coreMesh.material.color.setHex(0xffffff);
+        node.coreMesh.scale.set(2.0, 2.0, 2.0);
+        node.ringMesh.scale.set(2.0, 2.0, 1.0);
+      } else {
+        node.coreMesh.material.color.setHex(node.color);
+        node.coreMesh.scale.set(1.0, 1.0, 1.0);
+      }
+    }
+  }
+
+  getNodeWorldPosition(node) {
+    if (!node) return null;
+    const mesh = node.mesh || node.group;
+    if (!mesh) return null;
+    const worldPos = new THREE.Vector3();
+    mesh.getWorldPosition(worldPos);
+    return worldPos;
+  }
+
+  getNearestFrontFacingNode(camera, ndcCoords) {
+    if (this.subnodes.length > 0) {
+      let closestSub = null;
+      let minD = 10.0;
+      for (const sub of this.subnodes) {
+        const worldPos = new THREE.Vector3();
+        sub.group.getWorldPosition(worldPos);
+        const proj = worldPos.clone().project(camera);
+        if (proj.z < 1.0) {
+          const d = Math.hypot(proj.x - ndcCoords.x, proj.y - ndcCoords.y);
+          if (d < minD) { minD = d; closestSub = sub; }
+        }
+      }
+      if (closestSub && minD < 0.65) return closestSub;
+    }
+
+    let closestNode = null;
+    let minD = 10.0;
+    const camPos = camera.position.clone();
+    for (const node of this.nodes) {
+      const worldPos = new THREE.Vector3();
+      node.mesh.getWorldPosition(worldPos);
+      const toCam = camPos.clone().sub(worldPos).normalize();
+      const normal = worldPos.clone().normalize();
+      if (normal.dot(toCam) > 0.0) {
+        const proj = worldPos.clone().project(camera);
+        if (proj.z < 1.0) {
+          const d = Math.hypot(proj.x - ndcCoords.x, proj.y - ndcCoords.y);
+          if (d < minD) { minD = d; closestNode = node; }
+        }
+      }
+    }
+    return closestNode;
   }
 
   selectNode(node) {
     if (!node) return;
 
-    if (this.selectedNode) {
+    if (this.selectedNode && this.selectedNode !== node) {
       this.selectedNode.isSelected = false;
       this.selectedNode.coreMesh.material.color.setHex(this.selectedNode.color);
+      this.selectedNode.coreMesh.scale.set(1, 1, 1);
     }
 
     this.selectedNode = node;
@@ -356,7 +473,7 @@ class SpatialNodeManager {
     this.selectedNode.coreMesh.material.color.setHex(0xffffff);
     this.selectedNode.coreMesh.scale.set(1.8, 1.8, 1.8);
 
-    // Automatically expand hierarchical sub-node cluster
+    // Expand hierarchical sub-node cluster
     this.expandCluster(node);
   }
 
@@ -381,13 +498,25 @@ class SpatialNodeManager {
     if (!node) return;
     if (node.isSubnode) {
       // Reposition sub-node in local 3D cluster space
-      node.group.position.x += deltaX * 1.5;
-      node.group.position.y += deltaY * 1.5;
+      node.group.position.x += deltaX * 2.5;
+      node.group.position.y += deltaY * 2.5;
+      node.targetPos.copy(node.group.position);
+      node.currentPos.copy(node.group.position);
+
+      // Keep connecting energy line tethered to subnode
+      if (node.lineMesh && node.parent) {
+        const relPos = node.group.position.clone().sub(node.parent.basePos);
+        node.lineMesh.geometry.setFromPoints([
+          new THREE.Vector3(0, 0, 0),
+          relPos,
+        ]);
+      }
       return;
     }
 
-    node.lon += deltaX * 45.0;
-    node.lat += deltaY * 45.0;
+    // Parent node on globe surface
+    node.lon += deltaX * 55.0;
+    node.lat += deltaY * 55.0;
     node.lat = Math.max(-85, Math.min(85, node.lat));
 
     const newPos = this._latLonToVector3(node.lat, node.lon, this.globe.radius * 1.01);

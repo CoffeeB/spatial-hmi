@@ -1,5 +1,7 @@
 /**
  * Spatial Cursor component managing 2D/3D cursor feedback and state transitions.
+ * The cursor is clamped to the globe's projected screen-space circle so it
+ * never escapes the hologram area regardless of hand position.
  */
 
 class SpatialCursor {
@@ -13,6 +15,10 @@ class SpatialCursor {
     this.targetX = this.currentX;
     this.targetY = this.currentY;
 
+    // Globe screen-space bounds — updated each frame from app.js
+    // {cx, cy, r} all in CSS pixels
+    this.globeBounds = null;
+
     this.stateColors = {
       IDLE: "#6b7280",
       OBSERVING: "#00f0ff",
@@ -23,13 +29,48 @@ class SpatialCursor {
     };
   }
 
+  /**
+   * Called each frame from app.js with the globe's projected screen circle.
+   * @param {{ cx: number, cy: number, r: number }} bounds  CSS-pixel center + radius
+   */
+  setGlobeBounds(bounds) {
+    this.globeBounds = bounds;
+  }
+
+  /**
+   * Clamps a point (px, py) to lie within a circle of center (cx, cy) and radius r.
+   * Returns the clamped point.
+   */
+  _clampToCircle(px, py, cx, cy, r) {
+    const dx = px - cx;
+    const dy = py - cy;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist <= r) return { x: px, y: py };
+    // Project onto circle boundary
+    const scale = r / dist;
+    return { x: cx + dx * scale, y: cy + dy * scale };
+  }
+
   updateFromNDC(ndcX, ndcY, intentState, isPinchActive, pinchConfidence) {
     // Convert NDC [-1, 1] to screen pixel coordinates
     // NDC: x in [-1, 1], y in [-1, 1] (y is up in NDC, down in CSS)
-    this.targetX = ((ndcX + 1.0) / 2.0) * window.innerWidth;
-    this.targetY = ((1.0 - ndcY) / 2.0) * window.innerHeight;
+    let rawX = ((ndcX + 1.0) / 2.0) * window.innerWidth;
+    let rawY = ((1.0 - ndcY) / 2.0) * window.innerHeight;
 
-    // Smooth lerp
+    // Clamp to globe bounds circle so the cursor never escapes the hologram area
+    if (this.globeBounds) {
+      const clamped = this._clampToCircle(
+        rawX, rawY,
+        this.globeBounds.cx, this.globeBounds.cy, this.globeBounds.r
+      );
+      rawX = clamped.x;
+      rawY = clamped.y;
+    }
+
+    this.targetX = rawX;
+    this.targetY = rawY;
+
+    // Smooth lerp toward clamped target
     this.currentX += (this.targetX - this.currentX) * 0.35;
     this.currentY += (this.targetY - this.currentY) * 0.35;
 
@@ -58,3 +99,4 @@ class SpatialCursor {
     this.cursorElem.style.opacity = "1";
   }
 }
+

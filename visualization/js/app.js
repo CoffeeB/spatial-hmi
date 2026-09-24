@@ -69,6 +69,8 @@ class SpatialHMIApp {
     this.targetCameraDistance = 6.8;
     this.currentCameraDistance = 6.8;
     this.camera.position.set(0, 0, this.currentCameraDistance);
+    this.cameraFocusTarget = new THREE.Vector3(0, 0, 0);
+    this.focusTarget = null;
 
     // Transparent WebGL Renderer for AR Hologram overlay
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -101,6 +103,8 @@ class SpatialHMIApp {
     this.cursor = new SpatialCursor();
     this.debugOverlay = new DebugOverlay();
     this.activeManipulatedNode = null;
+    this.heldNode = null;
+    this.isZoomedOut = false;
     this.hasActiveVisionHand = false;
   }
 
@@ -274,8 +278,11 @@ class SpatialHMIApp {
     // 1. Update Full-Screen Camera Live Screen Feed
     if (packet.video_frame_b64) {
       const srcUrl = "data:image/jpeg;base64," + packet.video_frame_b64;
-      if (this.cameraScreenFeed && this.cameraScreenFeed.src !== srcUrl) {
-        this.cameraScreenFeed.src = srcUrl;
+      if (this.cameraScreenFeed) {
+        if (this.cameraScreenFeed.src !== srcUrl) {
+          this.cameraScreenFeed.src = srcUrl;
+        }
+        this.cameraScreenFeed.style.opacity = "1";
       }
       if (this.cameraFeed && this.cameraFeed.src !== srcUrl) {
         this.cameraFeed.src = srcUrl;
@@ -309,117 +316,165 @@ class SpatialHMIApp {
     const ndcVector = new THREE.Vector2(ndcX, ndcY);
     const hoveredNode = this.nodeManager.testRaycast(this.camera, ndcVector);
 
-    // If actively pointing at a node, auto-select & expand its sub-node cluster
-    if (packet.active_gesture === "POINT" && hoveredNode) {
-      if (hoveredNode.isSubnode) {
-        this.nodeManager.selectSubnode(hoveredNode);
-        this.activeManipulatedNode = hoveredNode;
-        this.actionLabel.textContent = `Pointing at Sub-Node: ${hoveredNode.label}`;
-      } else if (this.nodeManager.expandedCluster !== hoveredNode) {
-        this.nodeManager.selectNode(hoveredNode);
-        this.activeManipulatedNode = hoveredNode;
-        this.actionLabel.textContent = `Pointing: Expanded ${hoveredNode.label}`;
-        this.gesturePrompt.textContent = "Cluster opened! Pinch to manipulate sub-nodes, or spread hands to zoom.";
+    // 6. Node Holding: One hand can hold ANY node (parent or sub-node) with Pinch or Grab
+    // 6. Node Holding & Pinching: Pinch or Grab holds any node
+    const isPinchOrGrab = numHands === 1 && (
+      packet.active_gesture === "PINCH" ||
+      packet.active_gesture === "GRAB" ||
+      cmd.is_pinch_active ||
+      cmd.command_type === "FOCUS_NODE"
+    );
+
+    if (isPinchOrGrab) {
+      if (!this.heldNode) {
+        // Lock onto hovered node or the nearest visible front-facing node
+        const target = hoveredNode || this.nodeManager.getNearestFrontFacingNode(this.camera, ndcVector);
+        if (target) {
+          this.heldNode = target;
+          this.nodeManager.setNodeHolding(this.heldNode, true);
+          if (!this.heldNode.isSubnode && !this.nodeManager.expandedCluster) {
+            this.nodeManager.selectNode(this.heldNode);
+          }
+          const worldPos = this.nodeManager.getNodeWorldPosition(this.heldNode);
+          if (worldPos) {
+            this.focusTarget = worldPos.clone().multiplyScalar(0.35);
+          }
+          this.targetCameraDistance = 4.4;
+        }
+      }
+
+      if (this.heldNode) {
+        // Node is held: follow hand movement
+        const [dx, dy] = cmd.delta_translation || [0, 0];
+        if (Math.abs(dx) > 0.0001 || Math.abs(dy) > 0.0001) {
+          this.nodeManager.translateNode(this.heldNode, dx, dy);
+        }
+        this.actionLabel.textContent = `Holding: ${this.heldNode.label}`;
+        this.gesturePrompt.textContent = "Node is held. Move hand to reposition, Open Palm to anchor.";
+        return; // Prevent world spin/zoom while holding a node
+      }
+    } else {
+      if (this.heldNode) {
+        this.nodeManager.setNodeHolding(this.heldNode, false);
+        this.heldNode = null;
+        this.actionLabel.textContent = "Node Anchored";
       }
     }
 
-    // 6. Execute High-Level Spatial Commands
-    switch (cmd.command_type) {
-      case "HOVER":
-        if (hoveredNode) {
-          this.actionLabel.textContent = hoveredNode.isSubnode
-            ? `Hovering Sub-Node: ${hoveredNode.label} (${hoveredNode.metric})`
-            : `Hovering Cluster: ${hoveredNode.label}`;
-          this.gesturePrompt.textContent = "POINT at node to zoom into cluster, or PINCH to manipulate.";
-        } else {
-          this.actionLabel.textContent = "Exploring Hologram Space";
-          this.gesturePrompt.textContent = "Point at glowing nodes to zoom into clusters, or make a fist to rotate.";
-        }
-        break;
+    // 7. Two-Hand World Manipulation (Rotating, Expanding, Shrinking)
+    if (numHands >= 2 || cmd.command_type === "BIMANUAL_NAV") {
+      // Rotation: bounded strictly to hands edge-to-edge / top-to-bottom (NOT 360 spin)
+      if (cmd.delta_rotation) {
+        const [deltaYaw, deltaPitch, deltaRoll] = cmd.delta_rotation;
+        this.globe.applyBoundedHandRotation(deltaYaw, deltaPitch, deltaRoll || 0);
+      }
 
-      case "SELECT":
-        if (hoveredNode) {
-          if (hoveredNode.isSubnode) {
-            this.nodeManager.selectSubnode(hoveredNode);
-          } else {
-            this.nodeManager.selectNode(hoveredNode);
-          }
-          this.activeManipulatedNode = hoveredNode;
-          this.actionLabel.textContent = `Selected: ${hoveredNode.label}`;
-          this.gesturePrompt.textContent = "Node locked. PINCH and drag to reposition in 3D orbit.";
+      // Translation
+      if (cmd.delta_translation) {
+        const [dx, dy] = cmd.delta_translation;
+        if (Math.abs(dx) > 0.001 || Math.abs(dy) > 0.001) {
+          this.globe.applyTranslationDelta(dx * 1.5, dy * 1.5);
         }
-        break;
+      }
 
-      case "BIMANUAL_NAV":
-        if (cmd.delta_rotation) {
-          const [deltaYaw, deltaPitch] = cmd.delta_rotation;
-          if (Math.abs(deltaYaw) > 0.0001 || Math.abs(deltaPitch) > 0.0001) {
-            this.globe.applyRotationDelta(deltaYaw, deltaPitch);
-          }
+      // Expanding & Shrinking
+      const scale = cmd.delta_scale;
+      if (scale && Math.abs(scale - 1.0) > 0.001) {
+        this.targetCameraDistance = Math.max(3.8, Math.min(11.5, this.targetCameraDistance / scale));
+        if (scale > 1.002) {
+          this.actionLabel.textContent = "Two Hands Apart → Expanding Globe";
+        } else if (scale < 0.998) {
+          this.actionLabel.textContent = "Two Hands Together → Shrinking Globe";
         }
-        if (cmd.delta_scale && Math.abs(cmd.delta_scale - 1.0) > 0.001) {
-          this.targetCameraDistance = Math.max(3.6, Math.min(11.0, this.targetCameraDistance / cmd.delta_scale));
-        }
-        this.actionLabel.textContent = "Two-Hand Navigation";
-        this.gesturePrompt.textContent = "Move both hands to rotate globe; bring hands together to zoom in all nodes.";
-        break;
-
-      case "ROTATE_OBJECT":
-        if (cmd.delta_rotation) {
-          const [deltaYaw, deltaPitch] = cmd.delta_rotation;
-          this.globe.applyRotationDelta(deltaYaw, deltaPitch);
-          if (packet.active_gesture === "SWIPE_LEFT") {
-            this.actionLabel.textContent = "Slap Left -> Moving Left";
-          } else if (packet.active_gesture === "SWIPE_RIGHT") {
-            this.actionLabel.textContent = "Slap Right -> Moving Right";
-          } else if (packet.active_gesture === "SWIPE_UP") {
-            this.actionLabel.textContent = "Slap Up -> Moving Up";
-          } else if (packet.active_gesture === "SWIPE_DOWN") {
-            this.actionLabel.textContent = "Slap Down -> Moving Down";
-          } else {
-            this.actionLabel.textContent = "Rotating Hologram";
-          }
-          this.gesturePrompt.textContent = "Slap or move hand to rotate globe. Open hand to release.";
-        }
-        break;
-
-      case "SCALE_OBJECT":
-        if (cmd.delta_scale) {
-          this.targetCameraDistance = Math.max(3.6, Math.min(11.0, this.targetCameraDistance / cmd.delta_scale));
-          if (packet.active_gesture === "SPREAD_FINGERS") {
-            this.actionLabel.textContent = "Spread Fingers -> Zooming In";
-          } else if (packet.active_gesture === "SQUEEZE_FINGERS") {
-            this.actionLabel.textContent = "Squeeze Fingers -> Zooming Out";
-          } else {
-            this.actionLabel.textContent = "Spatial Zooming";
-          }
-          this.gesturePrompt.textContent = "Spread fingers or bring 2 hands together to zoom in; squeeze to zoom out.";
-        }
-        break;
-
-      case "TRANSLATE_NODE":
-        if (this.activeManipulatedNode && cmd.delta_translation) {
-          const [dx, dy] = cmd.delta_translation;
-          this.nodeManager.translateNode(this.activeManipulatedNode, dx, dy);
-          this.actionLabel.textContent = `Pinch Node: Following Finger (${this.activeManipulatedNode.label})`;
-          this.gesturePrompt.textContent = "Node is tracking finger. Release pinch to anchor new position.";
-        }
-        break;
-
-      case "RELEASE_OBJECT":
-        this.activeManipulatedNode = null;
-        this.actionLabel.textContent = "Observing Hologram";
-        this.gesturePrompt.textContent = "Hand opened. Hologram steady.";
-        break;
-
-      case "IDLE":
-      default:
-        this.actionLabel.textContent = this.nodeManager.expandedCluster
-          ? `Observing Cluster: ${this.nodeManager.expandedCluster.label}`
-          : "Observing Hologram";
-        this.gesturePrompt.textContent = "Slap L/R/U/D to move, pinch to track node, spread/squeeze fingers to zoom";
-        break;
+      } else {
+        this.actionLabel.textContent = "Two-Hand Bounded Manipulation (Edge-to-Edge)";
+      }
+      this.gesturePrompt.textContent = "Hands rotate edge-to-edge & top-to-bottom. Move apart to expand, together to shrink.";
+      return;
     }
+
+    // 8. One-Hand Gestures: Swiping (360 spin), Grabbing (Zoom out), Hand Release (Expand)
+    const isSwipeGesture = [
+      "SWIPE_LEFT", "SWIPE_RIGHT", "SWIPE_UP", "SWIPE_DOWN"
+    ].includes(packet.active_gesture);
+
+    if (isSwipeGesture || cmd.command_type === "ROTATE_OBJECT") {
+      if (state !== "RELEASE" && state !== "RELEASING" && state !== "IDLE") {
+        if (cmd.delta_rotation) {
+          const [deltaYaw, deltaPitch] = cmd.delta_rotation;
+          // Swiping triggers gradual 360-degree rotation vertical / horizontal
+          this.globe.applySwipeSpin(deltaYaw, deltaPitch);
+          const dir = packet.active_gesture ? packet.active_gesture.replace("SWIPE_", "") : "360";
+          this.actionLabel.textContent = `👋 360° Swipe Spin: ${dir}`;
+          this.gesturePrompt.textContent = "Swipe intensity determines 360° spin velocity.";
+          return;
+        }
+      }
+    }
+
+    // Hand Release / Open / Spread when zoomed out: expands globe back!
+    const isReleaseOrOpen = (
+      packet.active_gesture === "OPEN_PALM" ||
+      packet.active_gesture === "SPREAD_FINGERS" ||
+      state === "RELEASE" ||
+      cmd.command_type === "RELEASE_OBJECT" ||
+      cmd.command_type === "WORLD_ZOOM_MIN"
+    );
+
+    if (this.isZoomedOut && isReleaseOrOpen) {
+      this.targetCameraDistance = 5.2; // Smooth gradual expanded view
+      this.isZoomedOut = false;
+      this.actionLabel.textContent = "Hand Released → Expanding Globe";
+      this.gesturePrompt.textContent = "Globe expanded back into active view.";
+      return;
+    }
+
+    // Grab (closed fist in space) → Zoom out overview
+    if (packet.active_gesture === "GRAB" || cmd.command_type === "WORLD_ZOOM_MAX") {
+      this.focusTarget = null;
+      this.targetCameraDistance = 11.2;
+      this.isZoomedOut = true;
+      this.actionLabel.textContent = "Closed Fist Grab → Zoom Out Overview";
+      this.gesturePrompt.textContent = "Globe zoomed out. Release hand to expand back in.";
+      return;
+    }
+
+    // Spread Hand in normal mode → Close view
+    if (packet.active_gesture === "SPREAD_FINGERS" || cmd.command_type === "WORLD_ZOOM_MIN") {
+      this.targetCameraDistance = 3.8;
+      this.actionLabel.textContent = "Spread Hand → Close View";
+      this.gesturePrompt.textContent = "Camera easing to closest allowable distance.";
+      return;
+    }
+
+    // Hover / Pointing
+    if (hoveredNode) {
+      this.actionLabel.textContent = hoveredNode.isSubnode
+        ? `Hover Sub-Node: ${hoveredNode.label} (${hoveredNode.metric})`
+        : `Hover Node: ${hoveredNode.label}`;
+      this.gesturePrompt.textContent = "Pinch or Grab to hold this node. Point highlights.";
+      return;
+    }
+
+    // Release / Steady
+    if (cmd.command_type === "RELEASE_OBJECT" || state === "RELEASE" || state === "IDLE") {
+      this.globe.freeze();
+      if (this.focusTarget && packet.active_gesture === "OPEN_PALM") {
+        this.focusTarget = null;
+        this.targetCameraDistance = 6.8;
+        this.nodeManager.collapseCluster();
+      }
+      this.actionLabel.textContent = this.nodeManager.expandedCluster
+        ? `Observing Cluster: ${this.nodeManager.expandedCluster.label}`
+        : "Observing Hologram";
+      this.gesturePrompt.textContent = "Open palm release. Hologram steady.";
+      return;
+    }
+
+    // Default Idle
+    this.globe.freeze();
+    this.actionLabel.textContent = "Observing Hologram";
+    this.gesturePrompt.textContent = "Pinch/Grab node to hold, Swipe for 360° spin, 2 hands to rotate & zoom.";
   }
 
   _updateStateBadge(state, activeGesture) {
@@ -480,15 +535,43 @@ class SpatialHMIApp {
     requestAnimationFrame(() => this._animate());
     const deltaTime = this.clock.getDelta();
 
-    // Smooth camera distance interpolation
-    this.currentCameraDistance += (this.targetCameraDistance - this.currentCameraDistance) * 0.1;
+    // Smooth camera distance interpolation (easing)
+    this.currentCameraDistance += (this.targetCameraDistance - this.currentCameraDistance) * 0.045;
     this.camera.position.z = this.currentCameraDistance;
+
+    // Smooth focus mode camera orientation
+    if (this.focusTarget) {
+      this.cameraFocusTarget.lerp(this.focusTarget, 0.08);
+      this.camera.lookAt(this.cameraFocusTarget);
+    } else {
+      this.cameraFocusTarget.lerp(new THREE.Vector3(0, 0, 0), 0.08);
+      this.camera.lookAt(this.cameraFocusTarget);
+    }
 
     this.globe.update(deltaTime);
     this.nodeManager.update(deltaTime);
 
+    // ── Compute globe's projected screen-space circle every frame ──────────
+    // Project world origin (globe center) → screen pixel
+    const globeCenter3D = new THREE.Vector3(0, 0, 0);
+    const projected = globeCenter3D.clone().project(this.camera);
+    const screenCX = (projected.x * 0.5 + 0.5) * window.innerWidth;
+    const screenCY = (1 - (projected.y * 0.5 + 0.5)) * window.innerHeight;
+
+    // Project a point on the globe equator to get radius in pixels.
+    // Use globe.radius (2.3). Apply a slight margin (0.92) so cursor
+    // stays comfortably inside the wireframe boundary.
+    const equatorPoint = new THREE.Vector3(this.globe.radius * 0.92, 0, 0);
+    const projectedEdge = equatorPoint.clone().project(this.camera);
+    const edgeScreenX = (projectedEdge.x * 0.5 + 0.5) * window.innerWidth;
+    const screenR = Math.abs(edgeScreenX - screenCX);
+
+    this.cursor.setGlobeBounds({ cx: screenCX, cy: screenCY, r: screenR });
+    // ────────────────────────────────────────────────────────────────────────
+
     this.renderer.render(this.scene, this.camera);
   }
+
 }
 
 // Bootstrap application on DOM load

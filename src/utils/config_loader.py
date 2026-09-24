@@ -19,8 +19,12 @@ class CameraConfig(BaseModel):
 
 class PerceptionConfig(BaseModel):
     max_num_hands: int = 2
-    min_detection_confidence: float = 0.65
-    min_tracking_confidence: float = 0.60
+    # Lower thresholds allow detection of hands further from the camera.
+    # MediaPipe detection at distance produces smaller hand bounding boxes,
+    # which fail above ~0.60 confidence. 0.45/0.40 gives a good range without
+    # false-positive detections on other skin-tone objects.
+    min_detection_confidence: float = 0.45
+    min_tracking_confidence: float = 0.40
     model_complexity: int = 1
 
 
@@ -43,12 +47,19 @@ class GesturesConfig(BaseModel):
 
 
 class IntentConfig(BaseModel):
-    evidence_lambda: float = 0.55
+    # evidence_lambda: higher = slower decay = system waits longer before committing
+    # 0.75 means each frame contributes ~25% new signal; a gesture needs ~4 frames
+    # of sustained evidence to reach the activation threshold.
+    evidence_lambda: float = 0.75
     activation_threshold: float = 0.50
     release_threshold: float = 0.25
-    confirm_frames: int = 2
-    candidate_frames: int = 1
-    hand_loss_timeout_sec: float = 0.25
+    # Require 4 consecutive frames in CANDIDATE before CONFIRMED (was 2).
+    # At 30 fps this is ~133 ms — long enough to avoid reacting to incidental hand movements.
+    confirm_frames: int = 4
+    candidate_frames: int = 2
+    # 0.80 s grace window before hand loss collapses the state.
+    # Gives the user time to naturally reposition without the globe reacting.
+    hand_loss_timeout_sec: float = 0.80
 
 
 class OneEuroConfig(BaseModel):
