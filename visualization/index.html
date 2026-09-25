@@ -3,216 +3,281 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Spatial HMI | Gesture-Driven 3D Interactive Globe</title>
+  <title>Gestura — Level 0 Finger State Laboratory</title>
   <link rel="stylesheet" href="css/style.css">
   <!-- Three.js CDN -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
-<body>
-  <!-- Full-Screen Camera Viewport (Screen background) -->
-  <div id="camera-background" class="camera-background">
-    <img id="camera-screen-feed" class="camera-screen-feed" alt="Camera Feed" />
-    <div class="camera-vignette"></div>
-  </div>
-
-  <!-- 3D Hologram Spatial Canvas Viewport (Nodes hover above camera) -->
-  <div id="canvas-container"></div>
-
-  <!-- Developer Debug Skeleton Canvas (Visible when 'D' is pressed) -->
-  <canvas id="debug-skeleton-canvas" class="debug-skeleton-canvas hidden"></canvas>
-
-  <!-- Spatial Hand Cursor -->
-  <div id="spatial-cursor">
-    <div class="cursor-ring">
-      <div class="cursor-dot"></div>
+<body class="finger-lab-mode">
+  <!-- Top Navigation & Status Bar -->
+  <header class="lab-header">
+    <div class="brand-group">
+      <div class="brand-icon-pulse"></div>
+      <div class="brand-titles">
+        <h1 class="brand-name">GESTURA</h1>
+        <span class="brand-sub">LEVEL 0 FINGER STATE LABORATORY</span>
+      </div>
     </div>
-    <div class="cursor-pinch-ring"></div>
-  </div>
 
-  <!-- UI HUD Layer -->
-  <div class="ui-overlay">
-    <!-- Top Bar -->
-    <header class="top-bar">
-      <div class="brand-title">
-        <div class="brand-dot"></div>
-        <div class="brand-text">
-          <h1>SPATIAL HMI</h1>
-          <span>AUGMENTED REALITY HOLOGRAM</span>
+    <!-- Live Telemetry Status Badges -->
+    <div class="header-status-strip">
+      <div class="status-chip">
+        <div id="ws-status-dot" class="chip-dot disconnected"></div>
+        <span id="ws-status-text">CONNECTING...</span>
+      </div>
+      <div id="hand-count-chip" class="status-chip chip-muted">AWAITING HAND...</div>
+      <div id="fps-chip" class="status-chip chip-data">-- FPS</div>
+      <div id="latency-chip" class="status-chip chip-data">-- MS</div>
+    </div>
+
+    <!-- Laboratory Control Actions -->
+    <div class="header-actions">
+      <button id="toggle-axes-btn" class="action-btn active" title="Toggle 3D Coordinate Frame Axes">
+        <span>3D LOCAL FRAME</span>
+      </button>
+      <button id="toggle-angles-btn" class="action-btn active" title="Toggle Joint Angles Overlay">
+        <span>JOINT ANGLES</span>
+      </button>
+      <button id="record-btn" class="action-btn record-action">
+        <span class="rec-dot"></span>
+        <span id="record-btn-text">RECORD DATASET</span>
+      </button>
+      <button id="export-btn" class="action-btn hidden">
+        <span>EXPORT JSON</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Laboratory Split Layout -->
+  <main class="lab-viewport">
+    
+    <!-- LEFT PANEL: Sensor Vision & Kinematic Tracking -->
+    <section class="viewport-panel sensor-panel">
+      <div class="panel-tag">
+        <span class="tag-title">CAMERA SENSOR & 3D KINEMATICS</span>
+        <span id="tracking-conf-label" class="tag-meta">Conf: 0.00</span>
+      </div>
+
+      <!-- Video Feed & Skeleton Tracking Layer -->
+      <div class="feed-container">
+        <img id="camera-screen-feed" class="camera-screen-feed" alt="Live Hand Sensor Stream" />
+        <canvas id="hand-skeleton-canvas" class="hand-skeleton-canvas"></canvas>
+        <div id="sensor-placeholder" class="sensor-placeholder">
+          <div class="placeholder-spinner"></div>
+          <p>Waiting for Camera Feed from HMI Server...</p>
+          <span class="placeholder-hint">Start server: PYTHONPATH=. ./.venv/bin/python scripts/run_hmi_server.py</span>
         </div>
       </div>
 
-      <!-- Center Status & Mode -->
-      <div class="status-pill-container">
-        <div class="pill">
-          <div id="ws-status-dot" class="pill-dot disconnected"></div>
-          <span id="ws-status-text">CONNECTING...</span>
+      <!-- Kinematic Hand Orientation Footer -->
+      <div class="kinematic-strip">
+        <div class="kinematic-item">
+          <span class="k-label">PITCH:</span>
+          <span id="k-pitch-val" class="k-val">0.0°</span>
         </div>
-        <div id="control-mode-badge" class="pill control-mode-badge">MOUSE FALLBACK</div>
-        <div id="state-badge" class="pill state-badge state-idle">IDLE</div>
-      </div>
-
-      <!-- Recording Toolbar in Top Right -->
-      <div class="recording-toolbar">
-        <button id="record-btn" class="record-btn">
-          <span class="record-dot"></span>
-          <span id="record-btn-text">START RECORDING</span>
-        </button>
-        <button id="export-btn" class="export-btn hidden">
-          <span class="export-icon">&#x2193;</span>
-          <span>EXPORT DATASET</span>
-        </button>
-      </div>
-    </header>
-
-    <!-- Center HUD Action Text -->
-    <div class="center-hud">
-      <div id="action-label" class="action-label">Awaiting Hand Gesture...</div>
-      <div id="gesture-prompt" class="gesture-prompt">Point your finger at any glowing node or make a fist to rotate the hologram</div>
-    </div>
-
-    <!-- Hierarchical Cluster Telemetry HUD Card (Floating Hologram Card) -->
-    <div id="cluster-card" class="cluster-card hidden">
-      <div class="cluster-header">
-        <div class="cluster-badge-group">
-          <span class="cluster-badge">HIERARCHICAL CLUSTER</span>
-          <span id="cluster-node-count" class="cluster-count">4 SUB-NODES</span>
+        <div class="kinematic-item">
+          <span class="k-label">YAW:</span>
+          <span id="k-yaw-val" class="k-val">0.0°</span>
         </div>
-        <button id="cluster-close-btn" class="cluster-close-btn" title="Collapse Cluster">&times;</button>
-      </div>
-      <h3 id="cluster-title">Alpha Station</h3>
-      <p id="cluster-desc" class="cluster-desc">Primary Orbital Relay Network</p>
-      
-      <div id="subnodes-list" class="subnodes-list">
-        <!-- Dynamic Sub-Nodes -->
-      </div>
-      
-      <div class="cluster-footer">
-        <span class="cluster-hint">&#x2190; Open palm or click [Collapse] to return to Global view</span>
-      </div>
-    </div>
-
-    <!-- Bottom Strip -->
-    <footer class="bottom-bar">
-      <div class="interaction-legend">
-        <div class="legend-item">
-          <span class="legend-gesture">SLAP / SWIPE (L/R/U/D)</span>
-          <span class="legend-action">Move / Rotate in Direction</span>
+        <div class="kinematic-item">
+          <span class="k-label">ROLL:</span>
+          <span id="k-roll-val" class="k-val">0.0°</span>
         </div>
-        <div class="legend-divider"></div>
-        <div class="legend-item">
-          <span class="legend-gesture">PINCH NODE</span>
-          <span class="legend-action">Node Follows Finger</span>
-        </div>
-        <div class="legend-divider"></div>
-        <div class="legend-item">
-          <span class="legend-gesture">SPREAD FINGERS</span>
-          <span class="legend-action">Zoom In</span>
-        </div>
-        <div class="legend-divider"></div>
-        <div class="legend-item">
-          <span class="legend-gesture">SQUEEZE FINGERS</span>
-          <span class="legend-action">Zoom Out</span>
-        </div>
-        <div class="legend-divider"></div>
-        <div class="legend-item">
-          <span class="legend-gesture">2 HANDS TOGETHER</span>
-          <span class="legend-action">Zoom In All Nodes</span>
-        </div>
-        <div class="legend-divider"></div>
-        <div class="legend-item">
-          <span class="legend-gesture">2 HANDS MOVE</span>
-          <span class="legend-action">Move Globe in Direction</span>
+        <div class="kinematic-item">
+          <span class="k-label">SCALE REF (d_ref):</span>
+          <span id="k-scale-val" class="k-val">0.00</span>
         </div>
       </div>
+    </section>
 
-      <div class="quick-hints">
-        <span class="hint-key">[D]</span> Research Telemetry HUD &nbsp;|&nbsp;
-        <span class="hint-key">[R]</span> Toggle Recording &nbsp;|&nbsp;
-        <span class="hint-key">[ESC]</span> Collapse Cluster
+    <!-- RIGHT PANEL: What Is Every Individual Finger Doing? -->
+    <section class="viewport-panel state-panel">
+      <div class="panel-tag">
+        <span class="tag-title">WHAT IS EVERY INDIVIDUAL FINGER DOING?</span>
+        <span id="dominant-hand-badge" class="tag-meta highlight">PRIMARY: RIGHT</span>
       </div>
-    </footer>
-  </div>
 
-  <!-- Developer Telemetry HUD Panel (Press 'D' to toggle) -->
-  <aside id="telemetry-panel" class="telemetry-panel hidden">
-    <div class="panel-header">
-      <h3>RESEARCH TELEMETRY</h3>
-      <span class="toggle-hint">PRESS [D]</span>
-    </div>
+      <!-- 5 Dedicated Digit Interpretation Cards -->
+      <div class="digit-deck">
 
-    <div class="telemetry-row">
-      <span class="telemetry-label">Primary Hand:</span>
-      <span id="primary-hand-val" class="telemetry-value" style="color:#10b981;">Right</span>
-    </div>
+        <!-- THUMB CARD -->
+        <article class="digit-card" id="card-thumb">
+          <div class="card-head">
+            <div class="digit-id-group">
+              <span class="digit-badge">1</span>
+              <h2 class="digit-name">THUMB</h2>
+            </div>
+            <div class="state-pill state-uncertain" id="pill-thumb">UNCERTAIN</div>
+          </div>
+          <div class="metrics-row">
+            <div class="ext-gauge">
+              <div class="gauge-labels">
+                <span>Extension Ratio (R_ext)</span>
+                <span id="rext-thumb" class="gauge-num">0.00</span>
+              </div>
+              <div class="gauge-track"><div id="gauge-bar-thumb" class="gauge-fill"></div></div>
+            </div>
+            <div class="angles-block">
+              <div class="angle-tag">MCP: <strong id="mcp-thumb">0°</strong></div>
+              <div class="angle-tag">IP: <strong id="pip-thumb">0°</strong></div>
+            </div>
+          </div>
+          <div class="card-foot">
+            <span class="diag-label">Triggered by:</span>
+            <span id="diag-thumb" class="diag-text">Awaiting hand observation...</span>
+          </div>
+        </article>
 
-    <div class="telemetry-row">
-      <span class="telemetry-label">Modifier Hand:</span>
-      <span id="modifier-hand-val" class="telemetry-value" style="color:#94a3b8;">None</span>
-    </div>
+        <!-- INDEX CARD -->
+        <article class="digit-card" id="card-index">
+          <div class="card-head">
+            <div class="digit-id-group">
+              <span class="digit-badge">2</span>
+              <h2 class="digit-name">INDEX</h2>
+            </div>
+            <div class="state-pill state-uncertain" id="pill-index">UNCERTAIN</div>
+          </div>
+          <div class="metrics-row">
+            <div class="ext-gauge">
+              <div class="gauge-labels">
+                <span>Extension Ratio (R_ext)</span>
+                <span id="rext-index" class="gauge-num">0.00</span>
+              </div>
+              <div class="gauge-track"><div id="gauge-bar-index" class="gauge-fill"></div></div>
+            </div>
+            <div class="angles-block">
+              <div class="angle-tag">MCP: <strong id="mcp-index">0°</strong></div>
+              <div class="angle-tag">PIP: <strong id="pip-index">0°</strong></div>
+              <div class="angle-tag">DIP: <strong id="dip-index">0°</strong></div>
+            </div>
+          </div>
+          <div class="card-foot">
+            <span class="diag-label">Triggered by:</span>
+            <span id="diag-index" class="diag-text">Awaiting hand observation...</span>
+          </div>
+        </article>
 
-    <div class="telemetry-row">
-      <span class="telemetry-label">Gesture Candidate:</span>
-      <span id="candidate-gesture-val" class="telemetry-value" style="color:#f59e0b;">NONE</span>
-    </div>
+        <!-- MIDDLE CARD -->
+        <article class="digit-card" id="card-middle">
+          <div class="card-head">
+            <div class="digit-id-group">
+              <span class="digit-badge">3</span>
+              <h2 class="digit-name">MIDDLE</h2>
+            </div>
+            <div class="state-pill state-uncertain" id="pill-middle">UNCERTAIN</div>
+          </div>
+          <div class="metrics-row">
+            <div class="ext-gauge">
+              <div class="gauge-labels">
+                <span>Extension Ratio (R_ext)</span>
+                <span id="rext-middle" class="gauge-num">0.00</span>
+              </div>
+              <div class="gauge-track"><div id="gauge-bar-middle" class="gauge-fill"></div></div>
+            </div>
+            <div class="angles-block">
+              <div class="angle-tag">MCP: <strong id="mcp-middle">0°</strong></div>
+              <div class="angle-tag">PIP: <strong id="pip-middle">0°</strong></div>
+              <div class="angle-tag">DIP: <strong id="dip-middle">0°</strong></div>
+            </div>
+          </div>
+          <div class="card-foot">
+            <span class="diag-label">Triggered by:</span>
+            <span id="diag-middle" class="diag-text">Awaiting hand observation...</span>
+          </div>
+        </article>
 
-    <div class="telemetry-row">
-      <span class="telemetry-label">Active Gesture:</span>
-      <span id="gesture-value" class="telemetry-value">NONE</span>
-    </div>
+        <!-- RING CARD -->
+        <article class="digit-card" id="card-ring">
+          <div class="card-head">
+            <div class="digit-id-group">
+              <span class="digit-badge">4</span>
+              <h2 class="digit-name">RING</h2>
+            </div>
+            <div class="state-pill state-uncertain" id="pill-ring">UNCERTAIN</div>
+          </div>
+          <div class="metrics-row">
+            <div class="ext-gauge">
+              <div class="gauge-labels">
+                <span>Extension Ratio (R_ext)</span>
+                <span id="rext-ring" class="gauge-num">0.00</span>
+              </div>
+              <div class="gauge-track"><div id="gauge-bar-ring" class="gauge-fill"></div></div>
+            </div>
+            <div class="angles-block">
+              <div class="angle-tag">MCP: <strong id="mcp-ring">0°</strong></div>
+              <div class="angle-tag">PIP: <strong id="pip-ring">0°</strong></div>
+              <div class="angle-tag">DIP: <strong id="dip-ring">0°</strong></div>
+            </div>
+          </div>
+          <div class="card-foot">
+            <span class="diag-label">Triggered by:</span>
+            <span id="diag-ring" class="diag-text">Awaiting hand observation...</span>
+          </div>
+        </article>
 
-    <div class="telemetry-row">
-      <span class="telemetry-label">Interaction State:</span>
-      <span id="state-value" class="telemetry-value">IDLE</span>
-    </div>
-
-    <div class="telemetry-row">
-      <span class="telemetry-label">Active Command:</span>
-      <span id="command-value" class="telemetry-value">IDLE</span>
-    </div>
-
-    <div class="telemetry-row">
-      <span class="telemetry-label">Pipeline FPS:</span>
-      <span id="fps-value" class="telemetry-value">60.0</span>
-    </div>
-
-    <div class="telemetry-row">
-      <span class="telemetry-label">Latency:</span>
-      <span id="latency-value" class="telemetry-value">24.2 ms</span>
-    </div>
-
-    <div class="telemetry-row">
-      <span class="telemetry-label">Cursor NDC:</span>
-      <span id="cursor-pos-value" class="telemetry-value">(0.00, 0.00)</span>
-    </div>
-
-    <!-- Confidence Gauge -->
-    <div class="confidence-gauge-container">
-      <div class="telemetry-row">
-        <span class="telemetry-label">Intent Confidence:</span>
-        <span id="conf-value-label" class="telemetry-value">0.00</span>
+        <!-- LITTLE CARD -->
+        <article class="digit-card" id="card-little">
+          <div class="card-head">
+            <div class="digit-id-group">
+              <span class="digit-badge">5</span>
+              <h2 class="digit-name">LITTLE</h2>
+            </div>
+            <div class="state-pill state-uncertain" id="pill-little">UNCERTAIN</div>
+          </div>
+          <div class="metrics-row">
+            <div class="ext-gauge">
+              <div class="gauge-labels">
+                <span>Extension Ratio (R_ext)</span>
+                <span id="rext-little" class="gauge-num">0.00</span>
+              </div>
+              <div class="gauge-track"><div id="gauge-bar-little" class="gauge-fill"></div></div>
+            </div>
+            <div class="angles-block">
+              <div class="angle-tag">MCP: <strong id="mcp-little">0°</strong></div>
+              <div class="angle-tag">PIP: <strong id="pip-little">0°</strong></div>
+              <div class="angle-tag">DIP: <strong id="dip-little">0°</strong></div>
+            </div>
+          </div>
+          <div class="card-foot">
+            <span class="diag-label">Triggered by:</span>
+            <span id="diag-little" class="diag-text">Awaiting hand observation...</span>
+          </div>
+        </article>
       </div>
-      <div class="gauge-bar-bg">
-        <div id="conf-bar-fill" class="gauge-bar-fill"></div>
+
+      <!-- LOWER DECK: Live Canonical Terminal Readout & Synthesized Pose -->
+      <div class="synthesis-deck">
+        <!-- Terminal Summary Readout -->
+        <div class="terminal-card">
+          <div class="term-head">
+            <span>CANONICAL READOUT</span>
+            <span class="term-tag">RAW VOCABULARY</span>
+          </div>
+          <pre id="canonical-summary" class="term-code">
+Thumb:    --
+Index:    --
+Middle:   --
+Ring:     --
+Little:   --
+          </pre>
+        </div>
+
+        <!-- Synthesized Level 1 Pose Indicator -->
+        <div class="pose-synthesis-card">
+          <div class="term-head">
+            <span>LEVEL 1 SYNTHESIS</span>
+            <span id="synthesis-conf" class="term-tag">CONF: 0.00</span>
+          </div>
+          <div class="synthesis-body">
+            <div id="synthesized-pose-label" class="pose-big-label">IDLE</div>
+            <div id="synthesized-pose-desc" class="pose-desc">Holding neutral hand posture</div>
+          </div>
+        </div>
       </div>
-    </div>
+    </section>
+  </main>
 
-    <!-- Session Recording Status in Telemetry -->
-    <div class="telemetry-section-divider"></div>
-    <div class="telemetry-row">
-      <span class="telemetry-label">Recorded Frames:</span>
-      <span id="telemetry-rec-frames" class="telemetry-value">0</span>
-    </div>
-    <div class="telemetry-row">
-      <span class="telemetry-label">Dataset Size:</span>
-      <span id="telemetry-rec-size" class="telemetry-value">0 KB</span>
-    </div>
-  </aside>
-
-  <!-- Component Scripts -->
-  <script src="js/globe.js"></script>
-  <script src="js/nodes.js"></script>
-  <script src="js/spatial_cursor.js"></script>
-  <script src="js/debug_overlay.js"></script>
-  <script src="js/app.js"></script>
+  <!-- Component Scripts (Focused entirely on Finger Interpretation) -->
+  <script src="js/finger_lab.js"></script>
 </body>
 </html>

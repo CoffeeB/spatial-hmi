@@ -34,6 +34,13 @@ class DebugOverlay {
     this.modifierHandVal = document.getElementById("modifier-hand-val");
     this.candidateGestureVal = document.getElementById("candidate-gesture-val");
 
+    // Level 0 finger state telemetry elements
+    this.fingerThumbVal = document.getElementById("finger-thumb-val");
+    this.fingerIndexVal = document.getElementById("finger-index-val");
+    this.fingerMiddleVal = document.getElementById("finger-middle-val");
+    this.fingerRingVal = document.getElementById("finger-ring-val");
+    this.fingerLittleVal = document.getElementById("finger-little-val");
+
     // Legacy confidence bar (intent)
     this.confFill  = document.getElementById("conf-bar-fill");
     this.confLabel = document.getElementById("conf-value-label");
@@ -161,6 +168,14 @@ class DebugOverlay {
       if (fill)  fill.style.width = `${Math.round(val * 100)}%`;
       if (label) label.textContent = val.toFixed(2);
     }
+
+    // ── 2.5 Level 0 Finger States Readout ─────────────────────────────
+    const fs = packet.hands?.[0]?.finger_states || {};
+    if (this.fingerThumbVal) this.fingerThumbVal.textContent = fs["Thumb"] || "--";
+    if (this.fingerIndexVal) this.fingerIndexVal.textContent = fs["Index"] || "--";
+    if (this.fingerMiddleVal) this.fingerMiddleVal.textContent = fs["Middle"] || "--";
+    if (this.fingerRingVal) this.fingerRingVal.textContent = fs["Ring"] || "--";
+    if (this.fingerLittleVal) this.fingerLittleVal.textContent = fs["Little"] || "--";
 
     // ── 3. Feature Contributions Readout ──────────────────────────────
     const featBody = document.getElementById("v3-features-body");

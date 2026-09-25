@@ -13,6 +13,10 @@
 | :--- | :--- | :--- | :--- |
 | **1.0.0** | 2026-09-24 | Approved | Initial canonical release of the Gestura Gesture Bible. Full specification across Levels 0–4, Micro-Gestures, Spatial Interaction Principles, Context Mappings, and Multimodal Voice Integration. |
 
+**Companion Living Documents:**
+- 📊 **[GESTURE_LOGBOOK.md](file:///Users/mac/Desktop/gebashmi/docs/GESTURE_LOGBOOK.md)** — Empirical registry of all gestures tested, benchmarks, accuracy metrics, and failure post-mortems.
+- 🔬 **[RESEARCH_JOURNAL.md](file:///Users/mac/Desktop/gebashmi/docs/RESEARCH_JOURNAL.md)** — Chronological record of daily discoveries, mathematical formulations, failures, and future ideas.
+
 ---
 
 # Part I: Research Documentation & Interaction Architecture
@@ -52,14 +56,14 @@ Gestura models human hand interaction as a 5-layer hierarchical stack. Higher la
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ LEVEL 4: TWO-HAND COOPERATIVE GESTURES (T001–T099)                     │
-│ Asymmetric dual-hand manipulation: Bimanual scale, rotation, framing   │
+│ LEVEL 4: TWO-HAND COOPERATIVE GESTURES (T001–T099)                      │
+│ Asymmetric dual-hand manipulation: Bimanual scale, rotation, framing    │
 ├─────────────────────────────────────────────────────────────────────────┤
 │ LEVEL 3: COMPLETE GESTURES (G001–G999)                                  │
 │ Composition: Hand Pose + Motion Primitive + Intent Lifecycle            │
 ├─────────────────────────────────────────────────────────────────────────┤
 │ LEVEL 2: MOTION PRIMITIVES (M001–M099)                                  │
-│ Kinematic trajectories: Direction vector, velocity, displacement       │
+│ Kinematic trajectories: Direction vector, velocity, displacement        │
 ├─────────────────────────────────────────────────────────────────────────┤
 │ LEVEL 1: STATIC HAND POSES (H001–H099)                                  │
 │ Spatial configurations: Open palm, closed fist, pinch, point, thumbs-up │

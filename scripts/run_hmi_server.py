@@ -94,7 +94,7 @@ def main():
         camera.start()
 
     logger.info("Spatial HMI System running. Press Ctrl+C in terminal or 'q' in debug window to exit.")
-    logger.info(f"Open your browser to http://localhost:{args.http_port}/index.html to interact with the 3D globe.")
+    logger.info(f"Open your browser to http://localhost:{args.http_port}/index.html for the Gestura Level 0 Finger State Laboratory.")
 
     prev_time = time.time()
     fps = 0.0
@@ -136,6 +136,10 @@ def main():
                         pinch_confidence=h.pinch_confidence,
                         detection_confidence=h.detection_confidence,
                         landmarks_normalized=norm_pts,
+                        finger_states=h.finger_states.as_dict() if getattr(h, "finger_states", None) else {},
+                        finger_details=h.finger_states.as_details_dict() if getattr(h, "finger_states", None) else {},
+                        orientation_angles=h.orientation_angles,
+                        hand_scale_ref=float(h.hand_scale_ref),
                     )
                 )
 

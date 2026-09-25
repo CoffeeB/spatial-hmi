@@ -3,8 +3,11 @@ Structured internal representation of hand landmarks and spatial state.
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Literal, Optional, Tuple
+from typing import Dict, List, Literal, Optional, Tuple, TYPE_CHECKING
 import numpy as np
+
+if TYPE_CHECKING:
+    from src.landmarks.finger_state import HandFingerStates
 
 
 @dataclass(frozen=True)
@@ -41,9 +44,12 @@ class HandState:
     pinch_distance: float  # Normalized Euclidean distance between thumb tip and index tip
     pinch_confidence: float  # Continuous sigmoid confidence in [0, 1]
 
+    # Level 0 Finger States ("What is every individual finger doing?")
+    finger_states: Optional["HandFingerStates"] = None
+
     # Tracking Quality
-    detection_confidence: float
-    timestamp: float
+    detection_confidence: float = 1.0
+    timestamp: float = 0.0
 
     def get_landmark(self, idx: int) -> HandLandmark:
         """Returns landmark by MediaPipe 0-20 index."""

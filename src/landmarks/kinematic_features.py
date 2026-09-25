@@ -35,17 +35,38 @@ class KinematicFeatureExtractor:
 
     def compute_finger_extension_ratios(self, raw_landmarks: np.ndarray) -> Dict[str, float]:
         """
-        Computes the ratio of distance(tip, wrist) to distance(mcp, wrist).
-        A ratio > 1.2 indicates an extended finger, while < 0.9 indicates a curled finger.
+        Computes the continuous extension ratio for each finger.
+        For fingers 2-5: ratio of dist(tip, wrist) to dist(mcp, wrist).
+        For thumb: biomechanically grounded ratio combining thumb straightness (tip to CMC span),
+        radial abduction from index MCP, and palm distance, normalized to palm scale d_ref.
+        A ratio > 1.35 indicates an extended digit, while < 0.90 indicates a curled/folded digit.
         """
         p_wrist = raw_landmarks[0]
+        p_index_mcp = raw_landmarks[5]
+        p_middle_mcp = raw_landmarks[9]
+        d_ref = max(float(np.linalg.norm(p_middle_mcp - p_wrist)), 1e-4)
+        p_palm = (raw_landmarks[0] + raw_landmarks[5] + raw_landmarks[9] + raw_landmarks[17]) / 4.0
+
         ratios = {}
         for finger_name, indices in FINGER_INDICES.items():
-            p_tip = raw_landmarks[indices["tip"]]
-            p_mcp = raw_landmarks[indices["mcp"]]
-            d_tip = np.linalg.norm(p_tip - p_wrist)
-            d_mcp = max(np.linalg.norm(p_mcp - p_wrist), 1e-4)
-            ratios[finger_name] = float(d_tip / d_mcp)
+            if finger_name == "thumb":
+                p1 = raw_landmarks[1]
+                p2 = raw_landmarks[2]
+                p3 = raw_landmarks[3]
+                p4 = raw_landmarks[4]
+                L_thumb = np.linalg.norm(p2 - p1) + np.linalg.norm(p3 - p2) + np.linalg.norm(p4 - p3)
+                straightness = float(np.linalg.norm(p4 - p1) / max(L_thumb, 1e-4))
+                abduction = float(np.linalg.norm(p4 - p_index_mcp) / d_ref)
+                d_palm = float(np.linalg.norm(p4 - p_palm) / d_ref)
+                # Calibrated continuous ratio: ~1.75-2.0 (extended), ~1.15 (relaxed), ~0.55-0.75 (folded/tucked)
+                thumb_ratio = straightness * (0.50 + 1.10 * abduction + 0.40 * d_palm)
+                ratios[finger_name] = float(np.clip(thumb_ratio, 0.35, 2.20))
+            else:
+                p_tip = raw_landmarks[indices["tip"]]
+                p_mcp = raw_landmarks[indices["mcp"]]
+                d_tip = np.linalg.norm(p_tip - p_wrist)
+                d_mcp = max(np.linalg.norm(p_mcp - p_wrist), 1e-4)
+                ratios[finger_name] = float(d_tip / d_mcp)
         return ratios
 
     def compute_joint_flexion_angles(self, raw_landmarks: np.ndarray) -> Dict[str, float]:

@@ -28,6 +28,14 @@ class SpatialHMIApp {
     this.clusterCard = document.getElementById("cluster-card");
     this.clusterCloseBtn = document.getElementById("cluster-close-btn");
 
+    // Level 0 Live Finger HUD Card Elements
+    this.fingerHudCard = document.getElementById("finger-hud-card");
+    this.hudFThumb = document.getElementById("hud-f-thumb");
+    this.hudFIndex = document.getElementById("hud-f-index");
+    this.hudFMiddle = document.getElementById("hud-f-middle");
+    this.hudFRing = document.getElementById("hud-f-ring");
+    this.hudFLittle = document.getElementById("hud-f-little");
+
     // Recording Elements
     this.recordBtn = document.getElementById("record-btn");
     this.recordBtnText = document.getElementById("record-btn-text");
@@ -297,6 +305,29 @@ class SpatialHMIApp {
 
     if (this.camGestureBadge) {
       this.camGestureBadge.textContent = packet.active_gesture || "NONE";
+    }
+
+    // Update Level 0 Live Finger HUD Card
+    if (this.fingerHudCard) {
+      if (numHands > 0 && packet.hands[0]?.finger_states) {
+        const fs = packet.hands[0].finger_states;
+        this.fingerHudCard.classList.remove("hidden");
+        const digits = [
+          { el: this.hudFThumb, val: fs["Thumb"] },
+          { el: this.hudFIndex, val: fs["Index"] },
+          { el: this.hudFMiddle, val: fs["Middle"] },
+          { el: this.hudFRing, val: fs["Ring"] },
+          { el: this.hudFLittle, val: fs["Little"] },
+        ];
+        digits.forEach(d => {
+          if (d.el && d.val) {
+            d.el.textContent = d.val;
+            d.el.className = `f-val state-${d.val}`;
+          }
+        });
+      } else {
+        this.fingerHudCard.classList.add("hidden");
+      }
     }
 
     // 2. Update Debug Overlay

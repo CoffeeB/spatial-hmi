@@ -29,6 +29,7 @@ import numpy as np
 
 from src.gestures.confidence_estimator import ConfidenceEstimator
 from src.gestures.gesture_types import GestureType, RecognizedGesture
+from src.landmarks.finger_state import FingerName, FingerStateEnum
 from src.landmarks.hand_state import HandState
 
 
@@ -367,6 +368,36 @@ class HeuristicGestureClassifier:
 
         all_curled = idx_ext < 0.92 and mid_ext < 0.92 and rng_ext < 0.92 and pnk_ext < 0.92
         squeeze_score = grab_conf if (all_curled and raw_pinch_conf < 0.4) else 0.0
+
+        # ── 6.5. LEVEL 0 FINGER STATE SYNTHESIS ───────────────────────────
+        # When structured Level 0 states are present, reinforce composite poses
+        fs = getattr(hand, "finger_states", None)
+        if fs is not None:
+            # Pinch confirmation: thumb & index in pinching state
+            if fs.thumb.state == FingerStateEnum.PINCHING and fs.index.state == FingerStateEnum.PINCHING:
+                pinch_conf = max(pinch_conf, 0.90)
+
+            # Point confirmation: index extended while middle & ring folded/tucked
+            if fs.index.state == FingerStateEnum.EXTENDED and fs.middle.state in (
+                FingerStateEnum.FOLDED, FingerStateEnum.TUCKED, FingerStateEnum.HOOKED
+            ):
+                point_conf = max(point_conf, 0.88)
+
+            # Grab confirmation: digits 2-5 all folded/tucked/hooked into palm
+            digits_curled = all(
+                fs.get(f).state in (FingerStateEnum.FOLDED, FingerStateEnum.TUCKED, FingerStateEnum.HOOKED)
+                for f in [FingerName.INDEX, FingerName.MIDDLE, FingerName.RING, FingerName.LITTLE]
+            )
+            if digits_curled and fs.thumb.state != FingerStateEnum.PINCHING:
+                grab_conf = max(grab_conf, 0.88)
+
+            # Open Palm confirmation: all digits extended or relaxed
+            digits_open = all(
+                fs.get(f).state in (FingerStateEnum.EXTENDED, FingerStateEnum.RELAXED, FingerStateEnum.TOUCHING)
+                for f in [FingerName.INDEX, FingerName.MIDDLE, FingerName.RING, FingerName.LITTLE]
+            )
+            if digits_open and fs.thumb.state != FingerStateEnum.PINCHING:
+                open_palm_conf = max(open_palm_conf, 0.86)
 
         # ── 7. TEMPORAL SLAP / SWIPE DETECTION ────────────────────────────
         swipe_gesture, swipe_conf, slap_meta = self.slap_detector.process(hand, is_modifier=is_modifier)
