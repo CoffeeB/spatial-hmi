@@ -26,6 +26,22 @@
         <span id="ws-status-text">CONNECTING...</span>
       </div>
       <div id="hand-count-chip" class="status-chip chip-muted">AWAITING HAND...</div>
+
+      <!-- PROMINENT HEADER ACTIVE POSE BANNER -->
+      <div id="header-pose-chip" class="status-chip header-pose-chip">
+        <span class="chip-label">POSES:</span>
+        <div id="header-poses-wrap" class="header-poses-wrap">
+          <span id="header-left-hand-chip" class="hand-pose-badge hidden">
+            <span class="hand-side-tag tag-left">L</span>
+            <strong id="header-left-pose">NONE</strong>
+          </span>
+          <span id="header-right-hand-chip" class="hand-pose-badge">
+            <span class="hand-side-tag tag-right">R</span>
+            <strong id="header-right-pose">NONE</strong>
+          </span>
+        </div>
+      </div>
+
       <div id="fps-chip" class="status-chip chip-data">-- FPS</div>
       <div id="latency-chip" class="status-chip chip-data">-- MS</div>
     </div>
@@ -55,11 +71,19 @@
     <section class="viewport-panel sensor-panel">
       <div class="panel-tag">
         <span class="tag-title">CAMERA SENSOR & 3D KINEMATICS</span>
-        <span id="tracking-conf-label" class="tag-meta">Conf: 0.00</span>
+        <div class="sensor-tag-badges">
+          <span id="camera-zoom-badge" class="tag-meta zoom-pill">ZOOM: 1.0x [WIDE]</span>
+          <span id="tracking-conf-label" class="tag-meta">Conf: 0.00</span>
+        </div>
       </div>
 
-      <!-- Video Feed & Skeleton Tracking Layer -->
+      <!-- Clean Video Feed Layer with 3D Skeleton & Bearing Canvas Overlay -->
       <div class="feed-container">
+        <div id="camera-zoom-hud" class="camera-zoom-hud hidden">
+          <span class="camera-zoom-hud-dot"></span>
+          <span>AUTO-FOCUS LOCK:</span>
+          <b id="camera-zoom-hud-val">1.0x</b>
+        </div>
         <img id="camera-screen-feed" class="camera-screen-feed" alt="Live Hand Sensor Stream" />
         <canvas id="hand-skeleton-canvas" class="hand-skeleton-canvas"></canvas>
         <div id="sensor-placeholder" class="sensor-placeholder">
@@ -90,11 +114,49 @@
       </div>
     </section>
 
-    <!-- RIGHT PANEL: What Is Every Individual Finger Doing? -->
+    <!-- RIGHT PANEL: Level 1 Defined Hand Pose & Level 0 Individual Digits -->
     <section class="viewport-panel state-panel">
-      <div class="panel-tag">
-        <span class="tag-title">WHAT IS EVERY INDIVIDUAL FINGER DOING?</span>
-        <span id="dominant-hand-badge" class="tag-meta highlight">PRIMARY: RIGHT</span>
+      <!-- COMPACT WRAPPED LEVEL 1 DEFINED POSE & TOPOLOGY STRIP -->
+      <div class="wrapped-topology-card">
+        <div class="topo-pose-col">
+          <div class="topo-pose-head">
+            <span class="topo-tier-badge">DEFINED POSE</span>
+            <span id="hero-pose-id" class="hero-id-badge">UNKNOWN</span>
+            <span id="hero-pose-conf" class="hero-conf-badge">CONF: 0.00</span>
+          </div>
+          <div class="topo-pose-main">
+            <span id="hero-pose-name" class="topo-pose-title">NONE</span>
+            <span id="hero-pose-desc" class="topo-pose-desc">Awaiting hand observation...</span>
+          </div>
+        </div>
+        <div class="topo-derivation-col">
+          <div class="topo-formula-row">
+            <span class="topo-label">TOPOLOGY:</span>
+            <code id="hero-config-summary" class="topo-code">T:-- | I:-- | M:-- | R:-- | L:--</code>
+          </div>
+          <div id="hero-predicates-list" class="wrapped-predicates-tags">
+            <span class="pred-tag">Observing digit states...</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel-tag hand-selector-panel-tag">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span class="tag-title">INDIVIDUAL FINGER TELEMETRY</span>
+          <span id="dominant-hand-badge" class="hand-facing-pill">RIGHT HAND • FRONT</span>
+        </div>
+        <div class="hand-tabs-container">
+          <button id="hand-tab-left" class="hand-tab-btn" data-hand="Left">
+            <span class="tab-dot dot-left"></span>
+            <span class="tab-name">LEFT:</span>
+            <strong id="tab-left-pose">NONE</strong>
+          </button>
+          <button id="hand-tab-right" class="hand-tab-btn active" data-hand="Right">
+            <span class="tab-dot dot-right"></span>
+            <span class="tab-name">RIGHT:</span>
+            <strong id="tab-right-pose">NONE</strong>
+          </button>
+        </div>
       </div>
 
       <!-- 5 Dedicated Digit Interpretation Cards -->
@@ -243,36 +305,6 @@
             <span id="diag-little" class="diag-text">Awaiting hand observation...</span>
           </div>
         </article>
-      </div>
-
-      <!-- LOWER DECK: Live Canonical Terminal Readout & Synthesized Pose -->
-      <div class="synthesis-deck">
-        <!-- Terminal Summary Readout -->
-        <div class="terminal-card">
-          <div class="term-head">
-            <span>CANONICAL READOUT</span>
-            <span class="term-tag">RAW VOCABULARY</span>
-          </div>
-          <pre id="canonical-summary" class="term-code">
-Thumb:    --
-Index:    --
-Middle:   --
-Ring:     --
-Little:   --
-          </pre>
-        </div>
-
-        <!-- Synthesized Level 1 Pose Indicator -->
-        <div class="pose-synthesis-card">
-          <div class="term-head">
-            <span>LEVEL 1 SYNTHESIS</span>
-            <span id="synthesis-conf" class="term-tag">CONF: 0.00</span>
-          </div>
-          <div class="synthesis-body">
-            <div id="synthesized-pose-label" class="pose-big-label">IDLE</div>
-            <div id="synthesized-pose-desc" class="pose-desc">Holding neutral hand posture</div>
-          </div>
-        </div>
       </div>
     </section>
   </main>

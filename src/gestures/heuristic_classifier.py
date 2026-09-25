@@ -29,6 +29,7 @@ import numpy as np
 
 from src.gestures.confidence_estimator import ConfidenceEstimator
 from src.gestures.gesture_types import GestureType, RecognizedGesture
+from src.gestures.hand_pose import HandPoseClassifier, HandPoseId, POSE_CANONICAL_NAMES
 from src.landmarks.finger_state import FingerName, FingerStateEnum
 from src.landmarks.hand_state import HandState
 
@@ -245,6 +246,7 @@ class HeuristicGestureClassifier:
         # Two-hand rotation tracking: previous relative angle
         self._prev_bimanual_angle: Optional[float] = None
         self._prev_bimanual_angle_delta: float = 0.0
+        self.pose_classifier = HandPoseClassifier()
 
     def reset_hand(self, hand_id: int):
         self._smooth_hist.pop(hand_id, None)
@@ -369,35 +371,38 @@ class HeuristicGestureClassifier:
         all_curled = idx_ext < 0.92 and mid_ext < 0.92 and rng_ext < 0.92 and pnk_ext < 0.92
         squeeze_score = grab_conf if (all_curled and raw_pinch_conf < 0.4) else 0.0
 
-        # ── 6.5. LEVEL 0 FINGER STATE SYNTHESIS ───────────────────────────
-        # When structured Level 0 states are present, reinforce composite poses
-        fs = getattr(hand, "finger_states", None)
-        if fs is not None:
-            # Pinch confirmation: thumb & index in pinching state
-            if fs.thumb.state == FingerStateEnum.PINCHING and fs.index.state == FingerStateEnum.PINCHING:
-                pinch_conf = max(pinch_conf, 0.90)
-
-            # Point confirmation: index extended while middle & ring folded/tucked
-            if fs.index.state == FingerStateEnum.EXTENDED and fs.middle.state in (
-                FingerStateEnum.FOLDED, FingerStateEnum.TUCKED, FingerStateEnum.HOOKED
-            ):
-                point_conf = max(point_conf, 0.88)
-
-            # Grab confirmation: digits 2-5 all folded/tucked/hooked into palm
-            digits_curled = all(
-                fs.get(f).state in (FingerStateEnum.FOLDED, FingerStateEnum.TUCKED, FingerStateEnum.HOOKED)
-                for f in [FingerName.INDEX, FingerName.MIDDLE, FingerName.RING, FingerName.LITTLE]
+        # ── 6.5. LEVEL 1 STATIC HAND POSE DERIVATION ─────────────────────
+        # Hierarchical Determinism: Finger States -> Finger Configuration -> Hand Pose
+        derived_pose = getattr(hand, "derived_pose", None)
+        if derived_pose is None and getattr(hand, "finger_states", None) is not None:
+            derived_pose = self.pose_classifier.classify_pose(
+                finger_states=hand.finger_states,
+                raw_landmarks=hand.raw_landmarks_array,
+                d_ref=hand.hand_scale_ref,
+                orientation_angles=hand.orientation_angles,
             )
-            if digits_curled and fs.thumb.state != FingerStateEnum.PINCHING:
-                grab_conf = max(grab_conf, 0.88)
 
-            # Open Palm confirmation: all digits extended or relaxed
-            digits_open = all(
-                fs.get(f).state in (FingerStateEnum.EXTENDED, FingerStateEnum.RELAXED, FingerStateEnum.TOUCHING)
-                for f in [FingerName.INDEX, FingerName.MIDDLE, FingerName.RING, FingerName.LITTLE]
-            )
-            if digits_open and fs.thumb.state != FingerStateEnum.PINCHING:
-                open_palm_conf = max(open_palm_conf, 0.86)
+        if derived_pose is not None:
+            pid = derived_pose.pose_id
+            pconf = derived_pose.confidence
+
+            if pid == HandPoseId.H005_PRECISION_PINCH:
+                pinch_conf = max(pinch_conf, pconf)
+            elif pid == HandPoseId.H010_OK_RING:
+                pinch_conf = max(pinch_conf, pconf)
+            elif pid == HandPoseId.H004_INDEX_POINT:
+                point_conf = max(point_conf, pconf)
+            elif pid == HandPoseId.H003_CLOSED_FIST:
+                grab_conf = max(grab_conf, pconf)
+            elif pid == HandPoseId.H002_OPEN_PALM_SPREAD:
+                spread_score = max(spread_score, pconf)
+                open_palm_conf = max(open_palm_conf, pconf * 0.90)
+            elif pid == HandPoseId.H001_OPEN_PALM:
+                open_palm_conf = max(open_palm_conf, pconf)
+            elif pid == HandPoseId.H009_PEACE:
+                spread_score = max(spread_score, pconf * 0.90)
+            elif pid in (HandPoseId.H007_THUMBS_UP, HandPoseId.H008_THUMBS_DOWN, HandPoseId.H013_GUN):
+                point_conf = max(point_conf, pconf * 0.85)
 
         # ── 7. TEMPORAL SLAP / SWIPE DETECTION ────────────────────────────
         swipe_gesture, swipe_conf, slap_meta = self.slap_detector.process(hand, is_modifier=is_modifier)

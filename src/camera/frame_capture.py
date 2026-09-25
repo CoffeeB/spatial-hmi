@@ -71,6 +71,16 @@ class CameraStream:
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
         self.cap.set(cv2.CAP_PROP_FPS, self.target_fps)
+
+        # Attempt to enable hardware autofocus if supported by camera
+        try:
+            self.cap.set(cv2.CAP_PROP_AUTOFOCUS, 1)
+        except Exception:
+            pass
+
+        actual_w = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        actual_h = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        logger.info(f"Camera opened: requested {self.width}x{self.height}, actual {actual_w}x{actual_h}")
         return True
 
     def _capture_worker(self):

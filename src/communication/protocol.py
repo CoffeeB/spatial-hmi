@@ -21,6 +21,12 @@ class HandTelemetry(BaseModel):
     finger_details: Dict[str, Dict[str, Any]] = {}  # Per-digit kinematic metrics
     orientation_angles: Tuple[float, float, float] = (0.0, 0.0, 0.0)  # (pitch, yaw, roll)
     hand_scale_ref: float = 0.20  # Scale normalizer d_ref
+    # Level 1 Static Hand Pose (Derived from Level 0 Finger Configuration)
+    hand_pose_id: Optional[str] = "UNKNOWN"
+    hand_pose_name: Optional[str] = "NONE"
+    pose_predicates: List[str] = []
+    finger_config_summary: str = ""
+    palm_facing: str = "PALM"  # "PALM", "DORSAL", or "SIDE"
 
 
 class HMIPacket(BaseModel):
@@ -40,4 +46,6 @@ class HMIPacket(BaseModel):
     fps: float = 0.0
     latency_ms: float = 0.0
     video_frame_b64: Optional[str] = None  # Live annotated camera feed
+    camera_zoom: float = 1.0               # Current digital zoom factor (1.0 = wide angle)
+    camera_zoom_tracking: bool = False     # Whether camera is actively tracking/focusing on hands
     timestamp: float

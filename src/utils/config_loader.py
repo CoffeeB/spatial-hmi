@@ -10,11 +10,18 @@ from pydantic import BaseModel, Field
 
 class CameraConfig(BaseModel):
     device_index: int = 0
-    width: int = 640
-    height: int = 480
+    width: int = 1280
+    height: int = 720
     target_fps: int = 30
     auto_reconnect: bool = True
     reconnect_delay_sec: float = 1.0
+    auto_zoom: bool = True
+    min_zoom: float = 1.0
+    max_zoom: float = 3.5
+    target_hand_scale: float = 0.32
+    zoom_speed: float = 0.10
+    pan_speed: float = 0.12
+    hold_frames: int = 8
 
 
 class PerceptionConfig(BaseModel):

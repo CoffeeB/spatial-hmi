@@ -17,6 +17,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.camera.frame_capture import CameraStream
+from src.camera.zoom_controller import CameraZoomController
 from src.communication.protocol import HandTelemetry, HMIPacket
 from src.communication.websocket_server import HMIWebSocketServer
 from src.interaction.engine import InteractionEngine
@@ -49,6 +50,8 @@ def main():
     parser.add_argument("--http-port", type=int, default=8080, help="Port for static WebGL visualizer")
     parser.add_argument("--synthetic", action="store_true", help="Run in headless synthetic evaluation mode")
     parser.add_argument("--record", type=str, default=None, help="Path to output JSONL file for recording session telemetry")
+    parser.add_argument("--no-auto-zoom", action="store_true", help="Disable dynamic auto-zoom & auto-focus hand tracking")
+    parser.add_argument("--max-zoom", type=float, default=None, help="Maximum digital zoom level for distance hand tracking (default: 3.5)")
     args = parser.parse_args()
 
     config = load_config(args.config)
@@ -93,6 +96,21 @@ def main():
     if not args.synthetic:
         camera.start()
 
+    # 5. Initialize Dynamic Auto-Zoom & Auto-Focus Controller
+    auto_zoom_enabled = getattr(config.camera, "auto_zoom", True) and not args.no_auto_zoom
+    max_zoom_val = args.max_zoom if args.max_zoom is not None else getattr(config.camera, "max_zoom", 3.5)
+    zoom_controller = CameraZoomController(
+        enabled=auto_zoom_enabled,
+        min_zoom=getattr(config.camera, "min_zoom", 1.0),
+        max_zoom=max_zoom_val,
+        target_hand_scale=getattr(config.camera, "target_hand_scale", 0.32),
+        zoom_speed=getattr(config.camera, "zoom_speed", 0.10),
+        pan_speed=getattr(config.camera, "pan_speed", 0.12),
+        hold_frames=getattr(config.camera, "hold_frames", 8),
+    )
+    if auto_zoom_enabled:
+        logger.info(f"Dynamic Hand Auto-Zoom & Auto-Focus active (max zoom: {max_zoom_val:.1f}x).")
+
     logger.info("Spatial HMI System running. Press Ctrl+C in terminal or 'q' in debug window to exit.")
     logger.info(f"Open your browser to http://localhost:{args.http_port}/index.html for the Gestura Level 0 Finger State Laboratory.")
 
@@ -108,14 +126,37 @@ def main():
                 frame = np.zeros((config.camera.height, config.camera.width, 3), dtype=np.uint8)
                 ret = True
                 capture_time = loop_start
+                zoomed_frame = frame
             else:
                 ret, frame, capture_time = camera.read()
                 if not ret or frame is None:
                     time.sleep(0.01)
                     continue
 
-            # Process Perception
-            hand_states, annotated_frame = detector.process_frame(frame, timestamp=capture_time)
+                # Crop and dynamic auto-zoom/focus
+                zoomed_frame, _ = zoom_controller.crop_and_resize(
+                    frame,
+                    out_w=min(config.camera.width, 1280),
+                    out_h=min(config.camera.height, 720),
+                )
+
+            # Process Perception on zoomed/focused frame
+            hand_states, annotated_frame = detector.process_frame(zoomed_frame, timestamp=capture_time)
+
+            # High-speed fallback check: if no hands found in zoomed crop, but currently zoomed in > 1.15x
+            if not args.synthetic and len(hand_states) == 0 and zoom_controller.current_zoom > 1.15:
+                wide_states, _ = detector.process_frame(frame, timestamp=capture_time)
+                if len(wide_states) > 0:
+                    zoom_controller.notify_full_frame_detection(wide_states)
+                    zoomed_frame, _ = zoom_controller.crop_and_resize(
+                        frame,
+                        out_w=min(config.camera.width, 1280),
+                        out_h=min(config.camera.height, 720),
+                    )
+                    hand_states, annotated_frame = detector.process_frame(zoomed_frame, timestamp=capture_time)
+
+            # Update zoom controller with observed hand states for continuous smooth auto-framing
+            zoom_controller.update(hand_states, timestamp=capture_time)
 
             # Process Interaction Engine (FSM + Smoothing + Command Mapping)
             command, intent_ctx, primary_hand = engine.process_hands(hand_states, timestamp=capture_time)
@@ -140,13 +181,21 @@ def main():
                         finger_details=h.finger_states.as_details_dict() if getattr(h, "finger_states", None) else {},
                         orientation_angles=h.orientation_angles,
                         hand_scale_ref=float(h.hand_scale_ref),
+                        hand_pose_id=h.derived_pose.pose_id.value if getattr(h, "derived_pose", None) else "UNKNOWN",
+                        hand_pose_name=h.derived_pose.canonical_name if getattr(h, "derived_pose", None) else "NONE",
+                        pose_predicates=h.derived_pose.satisfied_predicates if getattr(h, "derived_pose", None) else [],
+                        finger_config_summary=h.derived_pose.configuration.summary() if getattr(h, "derived_pose", None) else "",
+                        palm_facing=getattr(h, "palm_facing", "PALM"),
                     )
                 )
 
             # Compress annotated frame to base64 JPEG for browser PiP feed
             video_b64 = None
             if annotated_frame is not None and not args.synthetic:
-                small_frame = cv2.resize(annotated_frame, (640, 480), interpolation=cv2.INTER_AREA)
+                feed_h, feed_w = annotated_frame.shape[:2]
+                out_feed_w = 640
+                out_feed_h = int(round(640 * (feed_h / feed_w)))
+                small_frame = cv2.resize(annotated_frame, (out_feed_w, out_feed_h), interpolation=cv2.INTER_AREA)
                 ret_enc, buf = cv2.imencode(".jpg", small_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 65])
                 if ret_enc:
                     import base64
@@ -164,6 +213,8 @@ def main():
                 fps=float(fps),
                 latency_ms=float(latency_ms),
                 video_frame_b64=video_b64,
+                camera_zoom=float(zoom_controller.current_zoom),
+                camera_zoom_tracking=bool(zoom_controller.is_tracking),
                 timestamp=now,
             )
 

@@ -73,11 +73,11 @@ class FingerStateDetail:
     """Detailed state analysis for a single digit."""
     finger: FingerName
     state: FingerStateEnum
-    confidence: float  # In [0, 1]
-    extension_ratio: float
-    mcp_flexion_deg: float
-    pip_flexion_deg: float
-    dip_flexion_deg: float
+    confidence: float = 1.0  # In [0, 1]
+    extension_ratio: float = 1.0
+    mcp_flexion_deg: float = 0.0
+    pip_flexion_deg: float = 0.0
+    dip_flexion_deg: float = 0.0
     contact_target: Optional[str] = None
     diagnostics: List[str] = field(default_factory=list)
 
@@ -94,6 +94,7 @@ class HandFingerStates:
     ring: FingerStateDetail
     little: FingerStateDetail
     timestamp: float = 0.0
+    palm_facing: str = "PALM"  # "PALM" (front), "DORSAL" (back), or "SIDE" (edge-on)
 
     def get(self, finger: FingerName) -> FingerStateDetail:
         return getattr(self, finger.value)
@@ -205,18 +206,19 @@ class FingerStateClassifier:
         return float(np.degrees(np.arccos(cosine)))
 
     def _build_hand_local_frame(
-        self, raw_pts: np.ndarray
-    ) -> Tuple[np.ndarray, np.ndarray, float]:
+        self, raw_pts: np.ndarray, handedness: str = "Right"
+    ) -> Tuple[np.ndarray, np.ndarray, float, str]:
         """
-        Builds hand-local orthonormal frame:
+        Builds hand-local orthonormal frame invariant to palm vs dorsal view:
         - Origin: Wrist (Landmark 0)
         - Y: Longitudinal axis from Wrist to Middle MCP (Landmark 9)
-        - Normal Z: Palm normal (X cross Y)
-        - X: Lateral axis across palm
+        - Normal Z: Palmar normal (pointing out of palm, volar direction)
+        - X: Lateral axis pointing towards radial / thumb side
         Returns:
             local_pts: (21, 3) landmarks in local frame normalized by d_ref
             rotation_matrix: (3, 3) transform matrix
             d_ref: characteristic distance (wrist to middle MCP)
+            palm_facing: "PALM" (front), "DORSAL" (back), or "SIDE" (edge-on)
         """
         p0 = raw_pts[0]   # Wrist
         p5 = raw_pts[5]   # Index MCP
@@ -228,30 +230,47 @@ class FingerStateClassifier:
             d_ref = 1.0
 
         v_y = (p9 - p0) / d_ref
-        v_lat = (p17 - p5)
-        norm_lat = np.linalg.norm(v_lat)
-        if norm_lat < 1e-5:
-            v_lat = np.array([1.0, 0.0, 0.0])
-        else:
-            v_lat = v_lat / norm_lat
 
-        v_z = np.cross(v_lat, v_y)
-        norm_z = np.linalg.norm(v_z)
-        if norm_z < 1e-5:
-            v_z = np.array([0.0, 0.0, 1.0])
+        # Compute anatomical palmar normal pointing OUT of the palm in camera coordinates:
+        # In MediaPipe camera coords (+X Right, +Y Down, +Z into screen):
+        # For Right hand with palm facing camera: (p17 - p5) points Right (+X), (p9 - p0) points Up (-Y).
+        # (+X) x (-Y) = -Z (pointing towards camera).
+        # For Left hand with palm facing camera: (p5 - p17) points Right (+X), (p9 - p0) points Up (-Y).
+        if handedness == "Left":
+            n_palm = np.cross(p5 - p17, p9 - p0)
         else:
-            v_z = v_z / norm_z
+            n_palm = np.cross(p17 - p5, p9 - p0)
 
+        norm_n = np.linalg.norm(n_palm)
+        if norm_n < 1e-5:
+            v_z = np.array([0.0, 0.0, -1.0])
+            palm_facing = "PALM"
+        else:
+            v_z = n_palm / norm_n
+            # In camera coords, camera is at origin looking down +Z.
+            # v_z[2] < -0.15 => Palmar normal points towards camera => PALM (front of hand)
+            # v_z[2] > 0.15  => Palmar normal points away from camera => DORSAL (back of hand)
+            # else          => Edge-on / SIDE
+            if v_z[2] < -0.15:
+                palm_facing = "PALM"
+            elif v_z[2] > 0.15:
+                palm_facing = "DORSAL"
+            else:
+                palm_facing = "SIDE"
+
+        # Lateral axis v_x pointing towards the radial side (towards the thumb)
         v_x = np.cross(v_y, v_z)
         norm_x = np.linalg.norm(v_x)
         if norm_x > 1e-5:
             v_x = v_x / norm_x
+        else:
+            v_x = np.array([1.0, 0.0, 0.0])
 
-        # R transforms world vectors into local hand frame: local = R.T @ (p - p0)
+        # R transforms world vectors into local hand frame: local = (p - p0) @ R / d_ref
         R = np.column_stack([v_x, v_y, v_z])
         local_pts = ((raw_pts - p0) @ R) / d_ref
 
-        return local_pts, R, d_ref
+        return local_pts, R, d_ref, palm_facing
 
     def classify_hand(
         self,
@@ -271,10 +290,15 @@ class FingerStateClassifier:
             visibilities: Optional per-landmark visibility scores [0, 1].
             timestamp: Time of frame capture.
         """
-        local_pts, _, d_ref = self._build_hand_local_frame(raw_landmarks)
+        local_pts, _, d_ref, palm_facing = self._build_hand_local_frame(raw_landmarks, handedness)
 
         # Check frame edge clipping or low detector confidence -> uncertain
         p0 = raw_landmarks[0]
+        p5 = raw_landmarks[5]
+        p9 = raw_landmarks[9]
+        p17 = raw_landmarks[17]
+
+        inner_hand_visible = bool(palm_facing == "PALM")
         is_edge = (p0[0] < 0.04 or p0[0] > 0.96 or p0[1] < 0.04 or p0[1] > 0.96)
         global_uncertain = (detection_confidence < 0.40) or is_edge
 
@@ -350,7 +374,7 @@ class FingerStateClassifier:
             else:
                 digit_vis = 1.0
 
-            if global_uncertain or digit_vis < self.min_vis:
+            if global_uncertain:
                 classified_digits[f_name] = FingerStateDetail(
                     finger=f_name,
                     state=FingerStateEnum.UNCERTAIN,
@@ -360,6 +384,20 @@ class FingerStateClassifier:
                     pip_flexion_deg=0.0,
                     dip_flexion_deg=0.0,
                     diagnostics=["Low tracking confidence or frame edge clipping"],
+                )
+                continue
+
+            # If finger is not in view / occluded from camera, do not assume position or track it
+            if digit_vis < self.min_vis:
+                classified_digits[f_name] = FingerStateDetail(
+                    finger=f_name,
+                    state=FingerStateEnum.UNCERTAIN,
+                    confidence=0.0,
+                    extension_ratio=ext_ratios[feat_key],
+                    mcp_flexion_deg=0.0,
+                    pip_flexion_deg=0.0,
+                    dip_flexion_deg=0.0,
+                    diagnostics=["Not in view / occluded from sensor"],
                 )
                 continue
 
@@ -383,8 +421,8 @@ class FingerStateClassifier:
             contact_target = None
             diags = []
 
-            # --- 1. Check CROSSED (Middle over Index, etc.) ---
-            if f_name == FingerName.MIDDLE:
+            # --- 1. Check CROSSED (Middle over Index, etc. - requires extended digits) ---
+            if f_name == FingerName.MIDDLE and angle_pip <= 45.0:
                 loc_index_tip = local_pts[8]
                 cross_offset = (loc_tip[0] - loc_index_tip[0]) if handedness == "Right" else (loc_index_tip[0] - loc_tip[0])
                 if cross_offset < -0.04 and abs(loc_tip[1] - loc_index_tip[1]) < 0.22:
@@ -409,17 +447,28 @@ class FingerStateClassifier:
 
             # --- 3. Check FOLDED / TUCKED (Balled into fist: All joints curled deep into palm) ---
             if state == FingerStateEnum.UNCERTAIN:
-                if (ext_r <= 0.92 or d_to_palm <= 0.40) and (angle_pip >= 75.0 or angle_mcp >= 45.0) and d_to_palm <= 0.48:
+                # Curled check works for both palm and dorsal views
+                # When dorsal side faces camera, MCP and PIP angles are flexed towards palm
+                is_curled = (
+                    (ext_r <= 0.96 or d_to_palm <= 0.54)
+                    and (angle_pip >= 55.0 or angle_mcp >= 40.0)
+                    and (d_to_palm <= 0.62 or ext_r <= 0.92)
+                ) or (
+                    # Direct dorsal view curled knuckle signature
+                    palm_facing == "DORSAL" and angle_mcp >= 40.0 and angle_pip >= 48.0 and ext_r <= 1.05
+                )
+
+                if is_curled:
                     d_thumb_knuckle = float(np.linalg.norm(tips[f_name] - raw_landmarks[2]) / d_ref)
-                    if d_thumb_knuckle < 0.28 and loc_tip[2] < -0.05:
+                    if d_thumb_knuckle < 0.28 and loc_tip[2] > 0.02:
                         state = FingerStateEnum.TUCKED
                         contact_target = "thumb_base"
                         confidence = 0.88
                         diags.append("Curled and tucked under thumb/knuckles")
                     else:
                         state = FingerStateEnum.FOLDED
-                        confidence = float(np.clip(0.65 + (1.0 - ext_r) * 0.4, 0.70, 0.98))
-                        diags.append(f"Curled into palm (ext_r={ext_r:.2f}, PIP={angle_pip:.1f}deg)")
+                        confidence = float(np.clip(0.65 + (1.0 - min(ext_r, 1.0)) * 0.4, 0.70, 0.98))
+                        diags.append(f"Curled into palm (ext_r={ext_r:.2f}, PIP={angle_pip:.1f}deg, MCP={angle_mcp:.1f}deg)")
 
             # --- 4. Check PINCHING (Opposing thumb tip while not balled into palm) ---
             if state == FingerStateEnum.UNCERTAIN:
@@ -520,12 +569,20 @@ class FingerStateClassifier:
         # B) Kinematic segment collapse / regression hallucination
         is_segment_collapsed = (L3 < 0.03 or L_thumb_norm < 0.35 or L_thumb_norm > 2.40)
 
-        # C) Behind-the-palm depth occlusion (Z < -0.06 and inside lateral palm boundary)
-        is_behind_palm = (loc_thumb_tip[2] < -0.06 and abs(loc_thumb_tip[0]) < 0.40 and loc_thumb_tip[1] > 0.05)
+        # C) Behind-the-palm depth occlusion from camera viewpoint
+        # If camera sees PALM, thumb is behind palm if loc_z < -0.12 (on dorsal side behind palm)
+        # If camera sees DORSAL, thumb is on radial border (+X); it's only hidden if tucked deep inside palm (loc_z > 0.22 and centered)
+        if palm_facing == "PALM":
+            is_behind_palm = bool(loc_thumb_tip[2] < -0.12 and abs(loc_thumb_tip[0]) < 0.32 and loc_thumb_tip[1] > 0.05)
+        elif palm_facing == "DORSAL":
+            is_behind_palm = bool(loc_thumb_tip[2] > 0.22 and abs(loc_thumb_tip[0]) < 0.25 and loc_thumb_tip[1] > 0.05)
+        else:
+            is_behind_palm = False
 
         other_fingers_curled = (
             classified_digits[FingerName.INDEX].state in (FingerStateEnum.FOLDED, FingerStateEnum.TUCKED)
             or classified_digits[FingerName.MIDDLE].state in (FingerStateEnum.FOLDED, FingerStateEnum.TUCKED)
+            or (palm_facing == "DORSAL" and classified_digits[FingerName.INDEX].extension_ratio <= 1.0)
         )
 
         # --- 1. Check PINCHING (High-priority active micro-interaction) ---
@@ -541,7 +598,7 @@ class FingerStateClassifier:
                 contact_target=pinching_digits[0].value,
                 diagnostics=[f"Pinching with {pinching_digits[0].value}"],
             )
-        elif global_uncertain or thumb_vis < self.min_vis:
+        elif global_uncertain:
             classified_digits[FingerName.THUMB] = FingerStateDetail(
                 finger=FingerName.THUMB,
                 state=FingerStateEnum.UNCERTAIN,
@@ -550,30 +607,19 @@ class FingerStateClassifier:
                 mcp_flexion_deg=angle_thumb_mcp,
                 pip_flexion_deg=angle_thumb_ip,
                 dip_flexion_deg=0.0,
-                diagnostics=["Thumb intentionally obstructed / occluded from sensor"],
+                diagnostics=["Global tracking uncertainty or frame edge clipping"],
             )
-        elif is_segment_collapsed:
+        # If thumb is not in view / occluded / collapsed, do not assume position or track it
+        elif thumb_vis < self.min_vis or is_segment_collapsed or (is_behind_palm and not other_fingers_curled):
             classified_digits[FingerName.THUMB] = FingerStateDetail(
                 finger=FingerName.THUMB,
                 state=FingerStateEnum.UNCERTAIN,
-                confidence=0.30,
-                extension_ratio=min(ext_r_thumb, 0.45),
-                mcp_flexion_deg=angle_thumb_mcp,
-                pip_flexion_deg=angle_thumb_ip,
+                confidence=0.0,
+                extension_ratio=ext_r_thumb,
+                mcp_flexion_deg=0.0,
+                pip_flexion_deg=0.0,
                 dip_flexion_deg=0.0,
-                diagnostics=["Thumb obstructed: kinematic segment collapse / unnatural deformation"],
-            )
-        elif is_behind_palm and not other_fingers_curled:
-            # Thumb tucked behind open palm (occluded from sensor view)
-            classified_digits[FingerName.THUMB] = FingerStateDetail(
-                finger=FingerName.THUMB,
-                state=FingerStateEnum.UNCERTAIN,
-                confidence=0.35,
-                extension_ratio=min(ext_r_thumb, 0.48),
-                mcp_flexion_deg=angle_thumb_mcp,
-                pip_flexion_deg=angle_thumb_ip,
-                dip_flexion_deg=0.0,
-                diagnostics=[f"Thumb occluded behind palm surface (Z={loc_thumb_tip[2]:.2f})"],
+                diagnostics=["Thumb not in view / occluded from sensor"],
             )
         else:
             thumb_state = FingerStateEnum.UNCERTAIN
@@ -593,9 +639,8 @@ class FingerStateClassifier:
 
             # --- Check CROSSED (Thumb crossed over closed fingers) ---
             elif (
-                d_thumb_to_index_mcp < 0.40
-                and loc_thumb_tip[2] > 0.10  # Sitting on dorsal / outer knuckle surface
-                and classified_digits[FingerName.INDEX].state == FingerStateEnum.FOLDED
+                d_thumb_to_index_mcp < 0.42
+                and other_fingers_curled
             ):
                 thumb_state = FingerStateEnum.CROSSED
                 thumb_contact = "index_knuckle"
@@ -616,9 +661,13 @@ class FingerStateClassifier:
                 thumb_diags.append(f"Hooked thumb IP={angle_thumb_ip:.1f}deg")
 
             # --- Check EXTENDED (Hitchhiker / radial abduction / spread) ---
-            elif ext_r_thumb >= 1.35 and angle_thumb_ip <= 30.0 and d_thumb_to_index_mcp >= 0.55:
+            elif (
+                (ext_r_thumb >= 1.15 and angle_thumb_ip <= 48.0 and d_thumb_to_index_mcp >= 0.35)
+                or (ext_r_thumb >= 1.30 and angle_thumb_ip <= 45.0)
+                or (palm_facing == "DORSAL" and ext_r_thumb >= 1.12 and d_thumb_to_index_mcp >= 0.34)
+            ):
                 thumb_state = FingerStateEnum.EXTENDED
-                thumb_conf = float(np.clip(0.75 + (ext_r_thumb - 1.35) * 0.8, 0.75, 0.99))
+                thumb_conf = float(np.clip(0.75 + (ext_r_thumb - 1.15) * 0.8, 0.75, 0.99))
                 thumb_diags.append(f"Extended outward (ext_r={ext_r_thumb:.2f}, IP={angle_thumb_ip:.1f}deg)")
 
             # --- Check FOLDED (Curled against palm) ---
@@ -658,6 +707,7 @@ class FingerStateClassifier:
             ring=classified_digits[FingerName.RING],
             little=classified_digits[FingerName.LITTLE],
             timestamp=timestamp,
+            palm_facing=palm_facing,
         )
 
 

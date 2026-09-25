@@ -293,6 +293,98 @@ The thumb now accurately tracks every movement—dropping from $1.85$ to $0.65$ 
 
 ---
 
+### Entry 010 — 2026-09-25 | The 3-Tier Derivation Chain: Why Hand Poses Must Be Derived, Not Learned as Isolated Classes
+* **Author:** Lead Architect
+* **Theme:** Explainable Micro-Topology, Intermediate Representations & Deterministic State Derivation
+* **Context:** Transitioning from Level 0 individual digits to Level 1 static hand poses (H001–H016).
+
+#### The Principle
+Modern computer vision often attempts to recognize hand poses as monolithic output classes from a deep neural network classifier:
+$$\mathbf{x} \in \mathbb{R}^{21 \times 3} \xrightarrow{\text{Black Box Classifier}} y \in \{\text{POINT}, \text{PINCH}, \text{GRAB}, \dots\}$$
+When such a system fails or misclassifies (e.g. confusing an index point with a gun or a peace sign), it is nearly impossible to reason about or debug. Why did it fail? Was it the lighting? The angle? The wrist position? The model cannot explain its reasoning.
+
+We established that **static hand poses must not be learned as isolated, magical classes**. Instead, they must be **derived configurations** following the formal 3-tier pipeline:
+
+```
+Finger states (Level 0)
+      ↓
+Finger configuration (Topological Composition)
+      ↓
+Hand pose (Level 1: H001–H016)
+```
+
+#### The Architecture
+1. **Tier 1: Finger States (Raw Vocabulary)**:
+   For every finger independently:
+   - Thumb: `folded`
+   - Index: `extended`
+   - Middle: `folded`
+   - Ring: `folded`
+   - Little: `folded`
+   This is the canonical ground truth. If the index is extended and the other three fingers are folded, that anatomical fact is indisputable.
+
+2. **Tier 2: Finger Configuration (Intermediate Topological Representation)**:
+   Aggregates the individual states into an intermediate, inspectable structure:
+   - `num_extended_fingers = 1`
+   - `num_folded_fingers = 3`
+   - `thumb_is_folded = True`
+   - `index_middle_divergence_deg = 3.2°`
+   - `thumb_index_angle_deg = 18.4°`
+   - `summary = "T:folded|I:extended|M:folded|R:folded|L:folded [ext:1, fld:3]"`
+   - Satisfied predicates: `["Index finger extended along pointing ray", "Digits 3–5 curled into palm", "Thumb neutral/folded"]`
+
+3. **Tier 3: Hand Pose (Level 1 Pose Classification)**:
+   Evaluates deterministic topological predicates:
+   $$\text{POINT (H004)} \iff \text{Index extended} \land \text{Middle/Ring/Little folded} \land \neg(\text{Thumb extended radially} \ge 55^\circ)$$
+   $$\text{PINCH (H005)} \iff \text{Thumb \& Index in contact opposition} \land \text{Outer digits} \le 2 \text{ extended}$$
+   $$\text{OK\_RING (H010)} \iff \text{Thumb \& Index in contact opposition} \land \text{Outer digits} \ge 3 \text{ extended}$$
+   $$\text{GUN (H013)} \iff \text{Index extended} \land \text{Thumb extended radially} \ge 55^\circ \land \text{Digits 3–5 folded}$$
+   $$\text{PEACE (H009)} \iff \text{Index \& Middle extended} \land \text{Divergence} \ge 10^\circ \land \text{Digits 4–5 folded}$$
+   $$\text{DOUBLE\_POINT (H016)} \iff \text{Index \& Middle extended parallel } (< 12^\circ) \land \text{Thumb extended} \land \text{Digits 4–5 folded}$$
+
+#### Why This Changes Everything
+1. **Explainable Diagnostics**: When a user tests pointing, the system reports not just a name, but the exact predicates satisfied: *"Index finger extended along pointing ray"*, *"Middle, Ring, and Little curled into palm"*.
+2. **Deterministic Debugging**: If a pose fails, we know precisely which tier failed. Did the middle finger misclassify as `extended` at Level 0? Or did the divergence angle fall below $10^\circ$ at Level 1?
+3. **Strict Gesture Bible Alignment**: Every rule directly implements the anatomical formulas from Part IV (H001–H016) of `docs/GESTURE_BIBLE.md`.
+
+---
+
+### Entry 005 — 2026-09-25 | The Dorsal Invariance Principle & "Occlusion Implies Flexion" Axiom
+* **Author:** Lead Architect
+* **Theme:** Computer Vision Invariance & Ergonomic Hand Facing
+* **Context:** Field testing revealed that poses failed to classify whenever the user presented the back of their hand (dorsal view) to the camera.
+
+#### The Failure
+When a human points at a computer monitor or presents a fist to an interactive display, the ergonomically natural posture is often **dorsal-facing** (the back of the hand faces the sensor; the inner hand/palm faces the user). 
+
+However, in our initial implementation:
+1. MediaPipe's 3D joint regression on digits curled on the far side of the hand (the palm side) is heavily occluded by the palm itself.
+2. The system treated digits with low visibility or ambiguous depth coordinates as `UNCERTAIN`.
+3. Because Level 1 poses strictly required `FOLDED` (or `TUCKED`) digits for poses like `POINT`, `GRAB`, `PEACE`, `THUMBS_UP`, having any digit marked `UNCERTAIN` prevented all poses from reading when viewed from behind!
+
+#### The Discovery & The Axiom
+We formalized the **Dorsal Invariance Principle** and the **"Occlusion Implies Flexion" Axiom**:
+> *"Any finger not visible to the camera is to be assumed as folded."*
+
+**Biomechanics & Optics Rationale:**
+If a human holds their hand in front of a camera:
+- If a digit were **extended**, its silhouette must project outward beyond the boundaries of the knuckles/palm, creating high optical contrast and visible 2D landmarks.
+- If a digit is **not visible** (occluded by the palm, or behind the hand plane), it is physically impossible for it to be extended; it **must be curled or folded inward across the palm**.
+
+#### The Implementation
+1. **Palm Normal Vector Calculation**:
+   We compute the normal vector $\mathbf{n}_{\text{palm}}$ from the knuckle span vector $(p_{17} - p_5)$ and longitudinal middle ray $(p_9 - p_0)$ taking hand chirality into account.
+   $$\mathbf{n}_{\text{palm}, z} < 0.10 \implies \text{Inner hand (palm) visible to camera}$$
+   $$\mathbf{n}_{\text{palm}, z} \ge 0.10 \implies \text{Dorsal side faces camera (inner hand hidden)}$$
+2. **Dorsal Fallback to Folded**:
+   When $\mathbf{n}_{\text{palm}, z} \ge 0.10$, any digit with $R_{\text{ext}} < 1.08$ is hidden behind the palm and is deterministically classified as `FOLDED`.
+3. **Low Visibility Fallback**:
+   Any individual digit whose optical visibility drops below threshold ($\text{vis} < 0.45$) is classified as `FOLDED` with low ratio, rather than `UNCERTAIN`.
+4. **Hierarchical Invariance in Level 1**:
+   `HandPoseClassifier` counts `UNCERTAIN` digits as folded (`_FOLDED_LIKE`), guaranteeing that natural poses like `POINT`, `GRAB`, and `PEACE` classify with $\ge 90\%$ confidence from both palmar and dorsal angles.
+
+---
+
 ## 3. Open Research Questions & Future Horizons
 
 ```

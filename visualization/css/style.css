@@ -31,6 +31,10 @@ body, html {
   color: var(--text-main);
 }
 
+.hidden {
+  display: none !important;
+}
+
 /* Full-Screen Camera Viewport */
 .camera-background {
   position: absolute;
@@ -1152,6 +1156,73 @@ body.finger-lab-mode {
   font-weight: 600;
 }
 
+.sensor-tag-badges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tag-meta.zoom-pill {
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #94a3b8;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  transition: all 0.25s ease;
+}
+
+.tag-meta.zoom-pill.zooming {
+  background: rgba(0, 240, 255, 0.12);
+  border-color: rgba(0, 240, 255, 0.45);
+  color: #00f0ff;
+  font-weight: 600;
+  box-shadow: 0 0 10px rgba(0, 240, 255, 0.25);
+}
+
+.camera-zoom-hud {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  background: rgba(10, 15, 30, 0.85);
+  border: 1px solid rgba(0, 240, 255, 0.40);
+  border-radius: 20px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: #e2e8f0;
+  backdrop-filter: blur(10px);
+  pointer-events: none;
+  z-index: 10;
+  box-shadow: 0 0 16px rgba(0, 240, 255, 0.25);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.camera-zoom-hud b {
+  color: #00f0ff;
+  font-weight: 700;
+}
+
+.camera-zoom-hud.hidden {
+  opacity: 0;
+  transform: translateY(-6px);
+  pointer-events: none;
+}
+
+.camera-zoom-hud-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #00f0ff;
+  box-shadow: 0 0 8px #00f0ff;
+  animation: pulse-glow 1.5s infinite ease-in-out;
+}
+
 /* Sensor Panel (Left) */
 .sensor-panel .feed-container {
   flex: 1;
@@ -1173,14 +1244,9 @@ body.finger-lab-mode {
 
 .sensor-panel .hand-skeleton-canvas {
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
   pointer-events: none;
+  z-index: 2;
 }
-
-.sensor-placeholder {
   position: absolute;
   display: flex;
   flex-direction: column;
@@ -1189,6 +1255,10 @@ body.finger-lab-mode {
   color: #64748b;
   text-align: center;
   padding: 24px;
+}
+
+.sensor-placeholder.hidden {
+  display: none !important;
 }
 
 .placeholder-spinner {
@@ -1234,29 +1304,296 @@ body.finger-lab-mode {
   color: #00f0ff;
 }
 
-/* State Panel (Right) */
-.state-panel {
-  padding: 0;
+/* Header Defined Pose Chip */
+.header-pose-chip {
+  background: rgba(16, 185, 129, 0.12) !important;
+  border-color: rgba(16, 185, 129, 0.4) !important;
+  color: #10b981 !important;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+}
+.header-pose-chip strong {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  color: #10b981;
+}
+
+/* Header Multi-Hand Pose Badges */
+.header-poses-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hand-pose-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(15, 23, 42, 0.6);
+  padding: 2px 7px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.hand-pose-badge.hidden {
+  display: none !important;
+}
+
+.hand-side-tag {
+  font-size: 9px;
+  font-weight: 800;
+  font-family: var(--font-mono);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.hand-side-tag.tag-left {
+  background: rgba(56, 189, 248, 0.25);
+  color: #38bdf8;
+}
+
+.hand-side-tag.tag-right {
+  background: rgba(16, 185, 129, 0.25);
+  color: #10b981;
+}
+
+/* Hand Selector Tabs in Finger Panel */
+.hand-selector-panel-tag {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.hand-tabs-container {
+  display: flex;
+  gap: 6px;
+}
+
+.hand-tab-btn {
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #94a3b8;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.hand-tab-btn:hover {
+  background: rgba(30, 41, 59, 0.9);
+  color: #f8fafc;
+}
+
+.hand-tab-btn.active {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: #10b981;
+  color: #10b981;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.2);
+}
+
+.hand-facing-pill {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(56, 189, 248, 0.15);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  color: #38bdf8;
+  letter-spacing: 0.5px;
+}
+
+.tab-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.tab-dot.dot-left {
+  background: #38bdf8;
+}
+
+.tab-dot.dot-right {
+  background: #10b981;
+}
+
+.chip-id-badge {
+  font-size: 9px;
+  font-family: var(--font-mono);
+  background: rgba(56, 189, 248, 0.2);
+  color: #38bdf8;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+/* Wrapped Topology & Level 1 Defined Pose Strip (Compact & Clean) */
+.wrapped-topology-card {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(15, 23, 42, 0.92) 100%);
+  border: 1.5px solid rgba(16, 185, 129, 0.35);
+  border-radius: 12px;
+  margin: 10px 14px 4px 14px;
+  padding: 8px 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.topo-pose-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 160px;
+}
+
+.topo-pose-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.topo-tier-badge {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #10b981;
+}
+
+.hero-id-badge {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.15);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.hero-conf-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: #fbbf24;
+}
+
+.topo-pose-main {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.topo-pose-title {
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: 0.03em;
+  color: #ffffff;
+  text-shadow: 0 0 12px rgba(16, 185, 129, 0.45);
+}
+
+.topo-pose-desc {
+  font-size: 11px;
+  color: #94a3b8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 170px;
+}
+
+.topo-derivation-col {
+  flex: 1;
+  min-width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.topo-formula-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.topo-label {
+  font-size: 9px;
+  font-weight: 700;
+  color: #64748b;
+  letter-spacing: 0.05em;
+}
+
+.topo-code {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: #a78bfa;
+  background: rgba(167, 139, 250, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(167, 139, 250, 0.2);
+}
+
+.wrapped-predicates-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-height: 48px;
   overflow-y: auto;
 }
 
-.digit-deck {
-  padding: 12px 16px;
+.pred-tag {
+  font-size: 9.5px;
+  font-family: var(--font-mono);
+  color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  padding: 2px 6px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pred-tag::before {
+  content: "✓";
+  color: #10b981;
+  font-weight: bold;
+}
+
+/* State Panel (Right) - Wrapped Layout */
+.state-panel {
+  padding: 0;
   display: flex;
   flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.digit-deck {
+  padding: 10px 14px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 8px;
   overflow-y: auto;
-  max-height: calc(100vh - 270px);
+  flex: 1;
 }
 
 .digit-card {
   background: rgba(18, 24, 42, 0.65);
   border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 12px;
-  padding: 10px 14px;
+  border-radius: 10px;
+  padding: 8px 12px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   transition: all 0.2s ease;
 }
 
@@ -1401,14 +1738,14 @@ body.finger-lab-mode {
   text-overflow: ellipsis;
 }
 
-/* Lower Synthesis Deck */
+/* Lower Synthesis Deck - 3-Tier Derivation Hierarchy */
 .synthesis-deck {
   padding: 12px 16px;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1.15fr 1fr;
   gap: 12px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(8, 12, 22, 0.8);
+  background: rgba(8, 12, 22, 0.85);
 }
 
 .terminal-card, .pose-synthesis-card {
@@ -1419,6 +1756,7 @@ body.finger-lab-mode {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .term-head {
@@ -1435,21 +1773,70 @@ body.finger-lab-mode {
   color: #00f0ff;
   font-family: var(--font-mono);
   font-size: 9px;
+  text-transform: uppercase;
 }
 
 .term-code {
   font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: 11px;
+  line-height: 1.45;
   color: #38bdf8;
   margin: 0;
   background: transparent;
 }
 
-.synthesis-body {
+/* Tier 2: Configuration Body */
+.config-body {
   display: flex;
   flex-direction: column;
+  gap: 6px;
+}
+
+.config-summary {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: #a78bfa;
+  background: rgba(167, 139, 250, 0.1);
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(167, 139, 250, 0.2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.predicate-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 58px;
+  overflow-y: auto;
+}
+
+.predicate-list li {
+  font-size: 10.5px;
+  color: #cbd5e1;
+  line-height: 1.3;
+  display: flex;
+  align-items: flex-start;
   gap: 4px;
+}
+
+.predicate-list li::before {
+  content: "•";
+  color: #10b981;
+  font-weight: bold;
+}
+
+/* Tier 3: Pose Header Line & Pill */
+.pose-header-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .pose-big-label {
@@ -1457,6 +1844,24 @@ body.finger-lab-mode {
   font-weight: 800;
   letter-spacing: 0.04em;
   color: #10b981;
+}
+
+.pose-id-pill {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  letter-spacing: 0.03em;
+}
+
+.synthesis-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .pose-desc {

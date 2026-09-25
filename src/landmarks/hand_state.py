@@ -3,7 +3,7 @@ Structured internal representation of hand landmarks and spatial state.
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Literal, Optional, Tuple, TYPE_CHECKING
+from typing import Any, Dict, List, Literal, Optional, Tuple, TYPE_CHECKING
 import numpy as np
 
 if TYPE_CHECKING:
@@ -46,6 +46,10 @@ class HandState:
 
     # Level 0 Finger States ("What is every individual finger doing?")
     finger_states: Optional["HandFingerStates"] = None
+
+    # Level 1 Static Hand Pose (Derived from Level 0 Finger Configuration)
+    derived_pose: Optional[Any] = None
+    palm_facing: str = "PALM"  # "PALM" (front), "DORSAL" (back), or "SIDE" (edge-on)
 
     # Tracking Quality
     detection_confidence: float = 1.0

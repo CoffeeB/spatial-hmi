@@ -351,32 +351,47 @@ class TestFingerStateClassifier:
 
     def test_thumb_obstruction_detection(self):
         """
-        Validates that when the thumb is obstructed (covered, occluded behind palm, or degenerate),
-        it correctly drops to UNCERTAIN with low ratio, rather than remaining high ratio / extended.
+        Validates that when the thumb is not in view / occluded from the camera,
+        the system stops assuming its position and marks it UNCERTAIN without tracking it as folded.
         """
         pts = create_base_hand_landmarks()
 
         # 1. Optical / sensor obstruction (visibilities < threshold)
         vis_obstructed = [1.0] * 21
-        vis_obstructed[4] = 0.15  # Thumb tip obstructed by non-skin object/cover
+        vis_obstructed[4] = 0.15  # Thumb tip obstructed
         states_obs = self.classifier.classify_hand(pts, visibilities=vis_obstructed)
         assert states_obs.thumb.state == FingerStateEnum.UNCERTAIN
-        assert states_obs.thumb.extension_ratio <= 0.45
-        assert any("obstructed" in d.lower() or "occluded" in d.lower() for d in states_obs.thumb.diagnostics)
+        assert states_obs.thumb.confidence == 0.0
+        assert any("not in view" in d.lower() or "occluded" in d.lower() for d in states_obs.thumb.diagnostics)
 
         # 2. Behind-the-palm occlusion (thumb hidden behind open hand: Z > 0 in camera space)
         pts_behind = create_base_hand_landmarks()
-        # Tip tucked behind palm away from camera
         pts_behind[4] = [0.48, 0.55, 0.08]
         states_behind = self.classifier.classify_hand(pts_behind)
         assert states_behind.thumb.state == FingerStateEnum.UNCERTAIN
-        assert states_behind.thumb.extension_ratio <= 0.50
-        assert any("behind palm" in d.lower() for d in states_behind.thumb.diagnostics)
+        assert any("not in view" in d.lower() or "occluded" in d.lower() for d in states_behind.thumb.diagnostics)
 
         # 3. Kinematic collapse / hallucination (joint distance collapsed to 0)
         pts_collapsed = create_base_hand_landmarks()
         pts_collapsed[4] = pts_collapsed[3].copy()  # Tip collapsed onto IP
         states_collapsed = self.classifier.classify_hand(pts_collapsed)
         assert states_collapsed.thumb.state == FingerStateEnum.UNCERTAIN
-        assert states_collapsed.thumb.extension_ratio <= 0.45
+
+    def test_dorsal_back_of_hand_detection_and_thumb_preservation(self):
+        """
+        Validates that when the back of the hand (dorsal side) faces the camera,
+        the system correctly recognizes palm_facing as DORSAL and does NOT falsely
+        flag the extended thumb as occluded/uncertain.
+        """
+        pts_dorsal = create_base_hand_landmarks()
+        # Flip X to represent back of right hand facing camera
+        pts_dorsal[:, 0] = 1.0 - pts_dorsal[:, 0]
+        # Abduct thumb radially
+        pts_dorsal[4] = [1.0 - 0.34, 0.48, 0.0]
+
+        states = self.classifier.classify_hand(pts_dorsal, handedness="Right")
+        assert states.palm_facing == "DORSAL"
+        assert states.thumb.state == FingerStateEnum.EXTENDED
+        assert states.index.state == FingerStateEnum.EXTENDED
+        assert states.middle.state == FingerStateEnum.EXTENDED
 
