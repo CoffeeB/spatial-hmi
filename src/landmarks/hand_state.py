@@ -65,6 +65,16 @@ class HandState:
     stability_context: Optional[Any] = None
     stability_telemetry: Optional[Dict[str, Any]] = None
 
+    # Continuous 3D Spatial Representation & Perception
+    perception: Optional[Any] = None
+    spatial_telemetry: Optional[Dict[str, Any]] = None
+
+    # Finger-Centric Perception Layer
+    # Parallel evidence stream: fingertip kinematics, chain analysis,
+    # viewpoint classification, and evidence fusion.
+    finger_centric: Optional[Any] = None
+    finger_centric_telemetry: Optional[Dict[str, Any]] = None
+
     # Tracking Quality
     detection_confidence: float = 1.0
     timestamp: float = 0.0

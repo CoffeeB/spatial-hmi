@@ -255,6 +255,7 @@ def main():
                         predicted_next_intent=getattr(cg, "predicted_next_intent", "NONE") if cg else "NONE",
                         temporal_telemetry=getattr(h, "temporal_telemetry", {}) or {},
                         stability_telemetry=getattr(h, "stability_telemetry", {}) or {},
+                        spatial_telemetry=getattr(h, "spatial_telemetry", {}) or {},
                     )
                 )
 

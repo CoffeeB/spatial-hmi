@@ -215,6 +215,25 @@ class FingerStateLab {
     // Reasoning / Explainability
     this.overlayExplainText = document.getElementById("overlay-explain-text");
 
+    // Developer Debug Overlay: Continuous 3D Spatial Representation
+    this.spatialOverlay = document.getElementById("spatial-representation-overlay");
+    this.toggleSpatialBtn = document.getElementById("toggle-spatial-panel-btn");
+    this.closeSpatialBtn = document.getElementById("close-spatial-btn");
+    this.spatialLifecyclePill = document.getElementById("spatial-lifecycle-pill");
+    this.spatialAmbiguityPill = document.getElementById("spatial-ambiguity-pill");
+    this.spatialFacingPill = document.getElementById("spatial-facing-pill");
+    this.spatialForeshortenPill = document.getElementById("spatial-foreshorten-pill");
+    this.spatialConfHeader = document.getElementById("spatial-conf-header");
+    this.spatialVec2dVal = document.getElementById("spatial-vec2d-val");
+    this.spatialHeadingVal = document.getElementById("spatial-heading-val");
+    this.spatialVel3dVal = document.getElementById("spatial-vel3d-val");
+    this.spatialSpeedVal = document.getElementById("spatial-speed-val");
+    this.spatialDepthVal = document.getElementById("spatial-depth-val");
+    this.spatialNormalVal = document.getElementById("spatial-normal-val");
+    this.spatialInterpVal = document.getElementById("spatial-interp-val");
+    this.spatialSecVal = document.getElementById("spatial-sec-val");
+    this.spatialExplainText = document.getElementById("spatial-explain-text");
+
     // Developer Debug Overlay: Stability Engine
     this.stabilityOverlay = document.getElementById("stability-engine-overlay");
     this.toggleStabilityBtn = document.getElementById("toggle-stability-panel-btn");
@@ -278,6 +297,26 @@ class FingerStateLab {
   }
 
   _initHandlers() {
+    if (this.toggleSpatialBtn && this.spatialOverlay) {
+      this.toggleSpatialBtn.addEventListener("click", () => {
+        const isHidden = this.spatialOverlay.classList.contains("hidden");
+        if (isHidden) {
+          this.spatialOverlay.classList.remove("hidden");
+          this.toggleSpatialBtn.classList.add("active");
+        } else {
+          this.spatialOverlay.classList.add("hidden");
+          this.toggleSpatialBtn.classList.remove("active");
+        }
+      });
+    }
+
+    if (this.closeSpatialBtn && this.spatialOverlay) {
+      this.closeSpatialBtn.addEventListener("click", () => {
+        this.spatialOverlay.classList.toggle("minimized");
+        this.closeSpatialBtn.textContent = this.spatialOverlay.classList.contains("minimized") ? "+" : "─";
+      });
+    }
+
     if (this.toggleStabilityBtn && this.stabilityOverlay) {
       this.toggleStabilityBtn.addEventListener("click", () => {
         const isHidden = this.stabilityOverlay.classList.contains("hidden");
@@ -805,6 +844,9 @@ class FingerStateLab {
 
     // 14. Level 3.5 Stability Engine Developer Overlay
     this._updateStabilityEngineOverlay(packet, primary);
+
+    // 15. Continuous 3D Spatial Representation Developer Overlay
+    this._updateSpatialRepresentationOverlay(packet, primary);
   }
 
   _updateCompleteGesture(primary) {
@@ -1491,6 +1533,7 @@ class FingerStateLab {
 
     this._resetTemporalIntentOverlay();
     this._resetStabilityEngineOverlay();
+    this._resetSpatialRepresentationOverlay();
   }
 
   _updateTemporalIntentOverlay(packet, primary) {
@@ -1925,6 +1968,184 @@ class FingerStateLab {
     if (this.stabilityExplainStrip && this.stabilityExplainText) {
       this.stabilityExplainStrip.classList.remove("has-rejections");
       this.stabilityExplainText.textContent = "Waiting for hand detection. Stability Engine monitoring sensor feed.";
+    }
+  }
+
+  _updateSpatialRepresentationOverlay(packet, primary) {
+    if (!this.spatialOverlay) return;
+
+    try {
+      const sp = (primary && primary.spatial_telemetry) || {};
+      const hand = sp.hand || {};
+      const orientation = hand.orientation || {};
+      const axes = hand.axes || {};
+      const fingers = sp.fingers || {};
+      const motion = sp.motion || {};
+      const spatial = sp.spatial || {};
+      const uncertainty = sp.uncertainty || {};
+
+      // 1. Header Badges
+      const lifecycle = uncertainty.state || "STABLE";
+      const ambLevel = spatial.ambiguity_level || uncertainty.directional_ambiguity || "LOW";
+      const facing = orientation.palm_facing || primary.palm_facing || "PALM";
+      const isForeshortened = Boolean(uncertainty.is_foreshortened);
+      const conf = Number(uncertainty.overall_confidence !== undefined ? uncertainty.overall_confidence : 0.95);
+
+      if (this.spatialLifecyclePill) {
+        this.spatialLifecyclePill.textContent = lifecycle;
+        if (lifecycle === "STABLE") {
+          this.spatialLifecyclePill.className = "intent-state-pill spatial-stable";
+        } else if (lifecycle === "TRANSITION") {
+          this.spatialLifecyclePill.className = "intent-state-pill stab-transition";
+        } else if (lifecycle === "UNCERTAIN") {
+          this.spatialLifecyclePill.className = "intent-state-pill stab-micro";
+        } else {
+          this.spatialLifecyclePill.className = "intent-state-pill stab-suppressed";
+        }
+      }
+
+      if (this.spatialAmbiguityPill) {
+        this.spatialAmbiguityPill.textContent = `AMB: ${ambLevel}`;
+        this.spatialAmbiguityPill.className = `spatial-ambiguity-pill amb-${ambLevel.toLowerCase()}`;
+      }
+
+      if (this.spatialFacingPill) {
+        this.spatialFacingPill.textContent = facing;
+      }
+
+      if (this.spatialForeshortenPill) {
+        this.spatialForeshortenPill.classList.toggle("hidden", !isForeshortened);
+      }
+
+      if (this.spatialConfHeader) {
+        this.spatialConfHeader.textContent = conf.toFixed(2);
+        this.spatialConfHeader.style.color = conf >= 0.75 ? "#00f0ff" : (conf >= 0.50 ? "#fbbf24" : "#f87171");
+      }
+
+      // 2. Continuous Vectors & Kinematics
+      const vec2d = spatial.screen_direction || [0.0, 0.0];
+      const heading = (motion.angles && motion.angles.heading_deg !== undefined) ? motion.angles.heading_deg : 0.0;
+      const vel3d = motion.velocity || [0.0, 0.0, 0.0];
+      const speeds = motion.speed || {};
+      const s3d = Number(speeds.speed_3d || 0.0).toFixed(2);
+      const sxy = Number(speeds.speed_xy || 0.0).toFixed(2);
+      const sz = Number(speeds.speed_z || 0.0).toFixed(2);
+      const depth = (motion.depth && motion.depth.state) ? motion.depth.state : "NEUTRAL";
+      const zNormal = (axes && axes.z_normal) ? axes.z_normal : [0.0, 0.0, -1.0];
+
+      if (this.spatialVec2dVal) this.spatialVec2dVal.textContent = `(${vec2d[0].toFixed(2)}, ${vec2d[1].toFixed(2)})`;
+      if (this.spatialHeadingVal) this.spatialHeadingVal.textContent = `${Number(heading).toFixed(1)}°`;
+      if (this.spatialVel3dVal) this.spatialVel3dVal.textContent = `(${vel3d[0].toFixed(2)}, ${vel3d[1].toFixed(2)}, ${vel3d[2].toFixed(2)})`;
+      if (this.spatialSpeedVal) this.spatialSpeedVal.textContent = `${s3d} | ${sxy} | ${sz}`;
+      if (this.spatialDepthVal) {
+        this.spatialDepthVal.textContent = depth;
+        this.spatialDepthVal.className = `s-val ${depth === "TOWARD" ? "highlight-cyan" : (depth === "AWAY" ? "highlight-orange" : "")}`;
+      }
+      if (this.spatialNormalVal) this.spatialNormalVal.textContent = `(${zNormal[0].toFixed(2)}, ${zNormal[1].toFixed(2)}, ${zNormal[2].toFixed(2)})`;
+
+      // 3. 8-Sector Soft Probability Distribution & Grey Zone
+      const dist = spatial.zone_distribution || {};
+      const primarySec = spatial.primary_sector || "CENTER";
+      const secondarySec = spatial.secondary_sector || "NONE";
+      const isAmbiguous = Boolean(spatial.is_ambiguous || uncertainty.is_direction_ambiguous);
+
+      const sectorMap = {
+        "sec-bar-top-left": "top_left",
+        "sec-bar-top": "top",
+        "sec-bar-top-right": "top_right",
+        "sec-bar-left": "left",
+        "sec-bar-center": "center",
+        "sec-bar-right": "right",
+        "sec-bar-bottom-left": "bottom_left",
+        "sec-bar-bottom": "bottom",
+        "sec-bar-bottom-right": "bottom_right",
+      };
+
+      for (const [elId, secKey] of Object.entries(sectorMap)) {
+        const el = document.getElementById(elId);
+        if (!el) continue;
+        const p = Number(dist[secKey] !== undefined ? dist[secKey] : (dist[secKey.toUpperCase()] || 0.0));
+        const fill = el.querySelector(".sec-bar-fill");
+        const valEl = el.querySelector(".sec-val");
+        if (fill) fill.style.width = `${Math.min(100, Math.round(p * 100))}%`;
+        if (valEl) valEl.textContent = p.toFixed(2);
+
+        const isPrimary = (primarySec.toLowerCase() === secKey);
+        const isSecondary = (secondarySec && secondarySec.toLowerCase() === secKey);
+        el.classList.toggle("active-sector", isPrimary);
+        el.classList.toggle("secondary-sector", isSecondary && !isPrimary);
+      }
+
+      if (this.spatialInterpVal) {
+        this.spatialInterpVal.textContent = primarySec;
+        this.spatialInterpVal.className = `interp-tag ${isAmbiguous ? "tag-ambiguous" : "tag-primary"}`;
+      }
+      if (this.spatialSecVal) {
+        this.spatialSecVal.textContent = secondarySec || "NONE";
+      }
+
+      // 4. Articulated Digits Kinematics
+      const digitOrder = ["thumb", "index", "middle", "ring", "little"];
+      digitOrder.forEach((dName) => {
+        const dGeom = fingers[dName] || {};
+        const dEl = document.getElementById(`digit-geom-${dName}`);
+        if (!dEl) return;
+        const stateEl = dEl.querySelector(".d-state");
+        const fillEl = dEl.querySelector(".d-curl-fill");
+        const valEl = dEl.querySelector(".d-curl-val");
+        const dirEl = dEl.querySelector(".d-dir-hand");
+
+        const stateStr = (dGeom.state || "EXT").slice(0, 3).toUpperCase();
+        const curl = Number(dGeom.curl_ratio !== undefined ? dGeom.curl_ratio : 0.0);
+        const dirHand = (dGeom.direction && dGeom.direction.hand_relative) ? dGeom.direction.hand_relative : [0.0, 1.0, 0.0];
+
+        if (stateEl) stateEl.textContent = stateStr;
+        if (fillEl) fillEl.style.width = `${Math.min(100, Math.round(curl * 100))}%`;
+        if (valEl) valEl.textContent = `${Math.round(curl * 100)}%`;
+        if (dirEl) dirEl.textContent = `(${dirHand[0].toFixed(1)}, ${dirHand[1].toFixed(1)}, ${dirHand[2].toFixed(1)})`;
+      });
+
+      // 5. Spatial Reasoning & Explainability
+      const reasons = uncertainty.reasons || [];
+      if (this.spatialExplainText) {
+        if (reasons.length > 0) {
+          this.spatialExplainText.textContent = `UNCERTAINTY DETECTED: ${reasons.join(" | ")}`;
+        } else if (isAmbiguous) {
+          this.spatialExplainText.textContent = `GREY ZONE: Direction is ambiguous between ${primarySec} and ${secondarySec}. Continuous distribution preserved.`;
+        } else {
+          this.spatialExplainText.textContent = `Continuous 3D articulated representation active. Direction: ${primarySec} (conf=${conf.toFixed(2)}). Hand frame stable.`;
+        }
+      }
+    } catch (err) {
+      console.warn("Error updating spatial representation overlay:", err);
+    }
+  }
+
+  _resetSpatialRepresentationOverlay() {
+    if (!this.spatialOverlay) return;
+    if (this.spatialLifecyclePill) {
+      this.spatialLifecyclePill.textContent = "IDLE";
+      this.spatialLifecyclePill.className = "intent-state-pill spatial-stable";
+    }
+    if (this.spatialAmbiguityPill) {
+      this.spatialAmbiguityPill.textContent = "AMB: LOW";
+      this.spatialAmbiguityPill.className = "spatial-ambiguity-pill amb-low";
+    }
+    if (this.spatialFacingPill) this.spatialFacingPill.textContent = "PALM";
+    if (this.spatialForeshortenPill) this.spatialForeshortenPill.classList.add("hidden");
+    if (this.spatialConfHeader) this.spatialConfHeader.textContent = "0.00";
+    if (this.spatialVec2dVal) this.spatialVec2dVal.textContent = "(0.00, 0.00)";
+    if (this.spatialHeadingVal) this.spatialHeadingVal.textContent = "0.0°";
+    if (this.spatialVel3dVal) this.spatialVel3dVal.textContent = "(0.00, 0.00, 0.00)";
+    if (this.spatialSpeedVal) this.spatialSpeedVal.textContent = "0.00 | 0.00 | 0.00";
+    if (this.spatialDepthVal) this.spatialDepthVal.textContent = "NEUTRAL";
+    if (this.spatialInterpVal) {
+      this.spatialInterpVal.textContent = "CENTER";
+      this.spatialInterpVal.className = "interp-tag tag-primary";
+    }
+    if (this.spatialSecVal) this.spatialSecVal.textContent = "NONE";
+    if (this.spatialExplainText) {
+      this.spatialExplainText.textContent = "Waiting for hand detection. Continuous 3D spatial representation engine monitoring sensor stream.";
     }
   }
 }

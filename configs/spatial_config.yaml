@@ -1,0 +1,33 @@
+spatial:
+  # Screen-space and 3D dead-zone thresholds
+  dead_zone_radius_2d: 0.02
+  dead_zone_radius_3d: 0.025
+  min_displacement: 0.015
+
+  # Soft directional sector classification
+  num_sectors: 8
+  sector_bandwidth_deg: 45.0
+  ambiguity_delta_threshold: 0.18
+  angular_hysteresis_deg: 12.0
+  vector_smoothing_alpha: 0.55
+
+  # 3D Depth motion thresholds
+  depth_speed_threshold: 0.12
+  depth_dominance_ratio: 0.65
+
+  # Hand-relative coordinate frame
+  wrist_index: 0
+  index_mcp_index: 5
+  middle_mcp_index: 9
+  pinky_mcp_index: 17
+  min_hand_scale_ref: 0.001
+
+  # Articulated finger geometry
+  curl_max_flexion_deg: 155.0
+  foreshortening_ratio_threshold: 0.60
+  foreshortening_z_threshold: 0.45
+
+  # Uncertainty & Temporal reconstruction
+  visibility_dropout_threshold: 0.40
+  temporal_reconstruction_window: 10
+  decay_rate_on_uncertainty: 0.88

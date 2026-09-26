@@ -48,7 +48,10 @@
 
     <!-- Laboratory Control Actions -->
     <div class="header-actions">
-      <button id="toggle-stability-panel-btn" class="action-btn active" title="Toggle Developer Stability Engine Panel">
+      <button id="toggle-spatial-panel-btn" class="action-btn" title="Toggle Continuous 3D Spatial Representation HUD">
+        <span>SPATIAL 3D HUD</span>
+      </button>
+      <button id="toggle-stability-panel-btn" class="action-btn" title="Toggle Developer Stability Engine Panel">
         <span>STABILITY ENGINE</span>
       </button>
       <button id="toggle-temporal-overlay-btn" class="action-btn" title="Toggle Temporal Intent HUD">
@@ -93,8 +96,173 @@
         <img id="camera-screen-feed" class="camera-screen-feed" alt="Live Hand Sensor Stream" />
         <canvas id="hand-skeleton-canvas" class="hand-skeleton-canvas"></canvas>
 
+        <!-- DEVELOPER DEBUG OVERLAY: CONTINUOUS 3D SPATIAL REPRESENTATION -->
+        <div id="spatial-representation-overlay" class="spatial-representation-overlay hidden">
+          <div class="overlay-header">
+            <div class="overlay-title-group">
+              <span class="overlay-live-dot spatial-dot"></span>
+              <span class="overlay-title">SPATIAL 3D REPRESENTATION</span>
+              <span id="spatial-lifecycle-pill" class="intent-state-pill spatial-stable">STABLE</span>
+              <span id="spatial-ambiguity-pill" class="spatial-ambiguity-pill amb-low">AMB: LOW</span>
+              <span id="spatial-facing-pill" class="dorsal-pill">PALM</span>
+              <span id="spatial-foreshorten-pill" class="foreshorten-pill hidden">FORESHORTENED</span>
+            </div>
+            <div class="overlay-perf-group">
+              <span class="overlay-perf-label">CONF:</span>
+              <span id="spatial-conf-header" class="overlay-perf-val highlight-val">0.96</span>
+              <button id="close-spatial-btn" class="overlay-close-btn" title="Toggle Compact Mode">─</button>
+            </div>
+          </div>
+
+          <!-- SPATIAL HUD BODY -->
+          <div class="spatial-hud-grid">
+            <!-- 1. CONTINUOUS VECTOR & MOTION COLUMN -->
+            <div class="spatial-hud-col">
+              <div class="spatial-subhead">CONTINUOUS KINEMATICS & VECTORS</div>
+              <div class="spatial-metric-row">
+                <span class="s-lbl">2D Screen Vector:</span>
+                <span id="spatial-vec2d-val" class="s-val font-mono">(0.00, 0.00)</span>
+              </div>
+              <div class="spatial-metric-row">
+                <span class="s-lbl">Continuous Heading:</span>
+                <span id="spatial-heading-val" class="s-val">0.0°</span>
+              </div>
+              <div class="spatial-metric-row">
+                <span class="s-lbl">3D Velocity:</span>
+                <span id="spatial-vel3d-val" class="s-val font-mono">(0.00, 0.00, 0.00)</span>
+              </div>
+              <div class="spatial-metric-row">
+                <span class="s-lbl">Speed (3D / XY / Z):</span>
+                <span id="spatial-speed-val" class="s-val">0.00 | 0.00 | 0.00</span>
+              </div>
+              <div class="spatial-metric-row">
+                <span class="s-lbl">Depth Kinematics:</span>
+                <span id="spatial-depth-val" class="s-val highlight-cyan">NEUTRAL</span>
+              </div>
+              <div class="spatial-metric-row">
+                <span class="s-lbl">Hand Basis Normal:</span>
+                <span id="spatial-normal-val" class="s-val font-mono">(0.00, 0.00, -1.00)</span>
+              </div>
+            </div>
+
+            <!-- 2. 8-SECTOR SOFT PROBABILITY & GREY ZONE COLUMN -->
+            <div class="spatial-hud-col">
+              <div class="spatial-subhead">8-SECTOR SOFT PROBABILITY (GREY ZONE)</div>
+              
+              <!-- Sector distribution visualizer bars -->
+              <div class="sector-prob-grid">
+                <div class="sector-bar-item" id="sec-bar-top-left">
+                  <span class="sec-label">TL</span>
+                  <div class="sec-bar-track"><div class="sec-bar-fill" style="width: 0%;"></div></div>
+                  <span class="sec-val">0.00</span>
+                </div>
+                <div class="sector-bar-item" id="sec-bar-top">
+                  <span class="sec-label">TOP</span>
+                  <div class="sec-bar-track"><div class="sec-bar-fill" style="width: 0%;"></div></div>
+                  <span class="sec-val">0.00</span>
+                </div>
+                <div class="sector-bar-item" id="sec-bar-top-right">
+                  <span class="sec-label">TR</span>
+                  <div class="sec-bar-track"><div class="sec-bar-fill" style="width: 0%;"></div></div>
+                  <span class="sec-val">0.00</span>
+                </div>
+                <div class="sector-bar-item" id="sec-bar-left">
+                  <span class="sec-label">LEFT</span>
+                  <div class="sec-bar-track"><div class="sec-bar-fill" style="width: 0%;"></div></div>
+                  <span class="sec-val">0.00</span>
+                </div>
+                <div class="sector-bar-item" id="sec-bar-center">
+                  <span class="sec-label">CTR</span>
+                  <div class="sec-bar-track"><div class="sec-bar-fill" style="width: 100%;"></div></div>
+                  <span class="sec-val">1.00</span>
+                </div>
+                <div class="sector-bar-item" id="sec-bar-right">
+                  <span class="sec-label">RIGHT</span>
+                  <div class="sec-bar-track"><div class="sec-bar-fill" style="width: 0%;"></div></div>
+                  <span class="sec-val">0.00</span>
+                </div>
+                <div class="sector-bar-item" id="sec-bar-bottom-left">
+                  <span class="sec-label">BL</span>
+                  <div class="sec-bar-track"><div class="sec-bar-fill" style="width: 0%;"></div></div>
+                  <span class="sec-val">0.00</span>
+                </div>
+                <div class="sector-bar-item" id="sec-bar-bottom">
+                  <span class="sec-label">BTM</span>
+                  <div class="sec-bar-track"><div class="sec-bar-fill" style="width: 0%;"></div></div>
+                  <span class="sec-val">0.00</span>
+                </div>
+                <div class="sector-bar-item" id="sec-bar-bottom-right">
+                  <span class="sec-label">BR</span>
+                  <div class="sec-bar-track"><div class="sec-bar-fill" style="width: 0%;"></div></div>
+                  <span class="sec-val">0.00</span>
+                </div>
+              </div>
+
+              <!-- Primary / Secondary / Ambiguity summary -->
+              <div class="spatial-interpretation-strip">
+                <div class="interp-box">
+                  <span class="interp-lbl">INTERPRETATION:</span>
+                  <strong id="spatial-interp-val" class="interp-tag tag-primary">CENTER</strong>
+                </div>
+                <div class="interp-box">
+                  <span class="interp-lbl">SECONDARY:</span>
+                  <span id="spatial-sec-val" class="interp-secondary">NONE</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 3. ARTICULATED DIGIT KINEMATICS COLUMN -->
+            <div class="spatial-hud-col">
+              <div class="spatial-subhead">ARTICULATED DIGIT KINEMATICS</div>
+              <div class="digit-geom-rows" id="spatial-digit-geom-rows">
+                <div class="digit-geom-item" id="digit-geom-thumb">
+                  <span class="d-name">THUMB</span>
+                  <span class="d-state">EXT</span>
+                  <div class="d-curl-track"><div class="d-curl-fill" style="width: 10%;"></div></div>
+                  <span class="d-curl-val">10%</span>
+                  <span class="d-dir-hand font-mono">(0.2, 0.9, 0.1)</span>
+                </div>
+                <div class="digit-geom-item" id="digit-geom-index">
+                  <span class="d-name">INDEX</span>
+                  <span class="d-state">EXT</span>
+                  <div class="d-curl-track"><div class="d-curl-fill" style="width: 5%;"></div></div>
+                  <span class="d-curl-val">5%</span>
+                  <span class="d-dir-hand font-mono">(0.0, 1.0, 0.0)</span>
+                </div>
+                <div class="digit-geom-item" id="digit-geom-middle">
+                  <span class="d-name">MIDDLE</span>
+                  <span class="d-state">EXT</span>
+                  <div class="d-curl-track"><div class="d-curl-fill" style="width: 5%;"></div></div>
+                  <span class="d-curl-val">5%</span>
+                  <span class="d-dir-hand font-mono">(0.0, 1.0, 0.0)</span>
+                </div>
+                <div class="digit-geom-item" id="digit-geom-ring">
+                  <span class="d-name">RING</span>
+                  <span class="d-state">EXT</span>
+                  <div class="d-curl-track"><div class="d-curl-fill" style="width: 8%;"></div></div>
+                  <span class="d-curl-val">8%</span>
+                  <span class="d-dir-hand font-mono">(0.0, 1.0, 0.0)</span>
+                </div>
+                <div class="digit-geom-item" id="digit-geom-little">
+                  <span class="d-name">LITTLE</span>
+                  <span class="d-state">EXT</span>
+                  <div class="d-curl-track"><div class="d-curl-fill" style="width: 12%;"></div></div>
+                  <span class="d-curl-val">12%</span>
+                  <span class="d-dir-hand font-mono">(-0.2, 0.9, 0.0)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- UNCERTAINTY EXPLAINABILITY STRIP -->
+          <div class="overlay-explain-row spatial-uncertainty-strip">
+            <span class="explain-label">SPATIAL UNCERTAINTY REASONING:</span>
+            <span id="spatial-explain-text" class="explain-text">Continuous 3D articulated representation active. Observations modeled probabilistically without forced categorization.</span>
+          </div>
+        </div>
+
         <!-- DEVELOPER DEBUG OVERLAY: STABILITY ENGINE -->
-        <div id="stability-engine-overlay" class="stability-engine-overlay">
+        <div id="stability-engine-overlay" class="stability-engine-overlay hidden">
           <div class="overlay-header">
             <div class="overlay-title-group">
               <span class="overlay-live-dot stability-dot"></span>
@@ -543,197 +711,7 @@
         </div>
       </div>
 
-      <div class="panel-tag hand-selector-panel-tag">
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <span class="tag-title">INDIVIDUAL FINGER TELEMETRY</span>
-          <span id="dominant-hand-badge" class="hand-facing-pill">RIGHT HAND • FRONT</span>
-        </div>
-        <div class="hand-tabs-container">
-          <button id="hand-tab-left" class="hand-tab-btn" data-hand="Left">
-            <span class="tab-dot dot-left"></span>
-            <span class="tab-name">LEFT:</span>
-            <strong id="tab-left-pose">NONE</strong>
-          </button>
-          <button id="hand-tab-right" class="hand-tab-btn active" data-hand="Right">
-            <span class="tab-dot dot-right"></span>
-            <span class="tab-name">RIGHT:</span>
-            <strong id="tab-right-pose">NONE</strong>
-          </button>
-        </div>
-      </div>
 
-      <!-- 5 Dedicated Digit Interpretation Cards -->
-      <div class="digit-deck">
-
-        <!-- THUMB CARD -->
-        <article class="digit-card" id="card-thumb">
-          <div class="card-head">
-            <div class="digit-id-group">
-              <span class="digit-badge">1</span>
-              <h2 class="digit-name">THUMB</h2>
-            </div>
-            <div class="card-head-badges">
-              <span class="focal-pill" id="focal-pill-thumb" style="display: none; background: rgba(56, 189, 248, 0.2); border: 1px solid #38bdf8; color: #38bdf8; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px;">🎯 FOCAL</span>
-              <span class="digit-intent-pill" id="intent-pill-thumb" style="display: none; background: rgba(168, 85, 247, 0.2); border: 1px solid #a855f7; color: #e9d5ff; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px;">INTENT</span>
-              <span class="finger-motion-pill" id="motion-pill-thumb">⏹ STILL</span>
-              <div class="state-pill state-uncertain" id="pill-thumb">UNCERTAIN</div>
-            </div>
-          </div>
-          <div class="metrics-row">
-            <div class="ext-gauge">
-              <div class="gauge-labels">
-                <span>Extension Ratio (R_ext)</span>
-                <span id="rext-thumb" class="gauge-num">0.00</span>
-              </div>
-              <div class="gauge-track"><div id="gauge-bar-thumb" class="gauge-fill"></div></div>
-            </div>
-            <div class="angles-block">
-              <div class="angle-tag">MCP: <strong id="mcp-thumb">0°</strong></div>
-              <div class="angle-tag">IP: <strong id="pip-thumb">0°</strong></div>
-            </div>
-          </div>
-          <div class="card-foot">
-            <span class="diag-label">Triggered by:</span>
-            <span id="diag-thumb" class="diag-text">Awaiting hand observation...</span>
-          </div>
-        </article>
-
-        <!-- INDEX CARD -->
-        <article class="digit-card" id="card-index">
-          <div class="card-head">
-            <div class="digit-id-group">
-              <span class="digit-badge">2</span>
-              <h2 class="digit-name">INDEX</h2>
-            </div>
-            <div class="card-head-badges">
-              <span class="focal-pill" id="focal-pill-index" style="display: none; background: rgba(56, 189, 248, 0.2); border: 1px solid #38bdf8; color: #38bdf8; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px;">🎯 FOCAL</span>
-              <span class="digit-intent-pill" id="intent-pill-index" style="display: none; background: rgba(168, 85, 247, 0.2); border: 1px solid #a855f7; color: #e9d5ff; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px;">INTENT</span>
-              <span class="finger-motion-pill" id="motion-pill-index">⏹ STILL</span>
-              <div class="state-pill state-uncertain" id="pill-index">UNCERTAIN</div>
-            </div>
-          </div>
-          <div class="metrics-row">
-            <div class="ext-gauge">
-              <div class="gauge-labels">
-                <span>Extension Ratio (R_ext)</span>
-                <span id="rext-index" class="gauge-num">0.00</span>
-              </div>
-              <div class="gauge-track"><div id="gauge-bar-index" class="gauge-fill"></div></div>
-            </div>
-            <div class="angles-block">
-              <div class="angle-tag">MCP: <strong id="mcp-index">0°</strong></div>
-              <div class="angle-tag">PIP: <strong id="pip-index">0°</strong></div>
-              <div class="angle-tag">DIP: <strong id="dip-index">0°</strong></div>
-            </div>
-          </div>
-          <div class="card-foot">
-            <span class="diag-label">Triggered by:</span>
-            <span id="diag-index" class="diag-text">Awaiting hand observation...</span>
-          </div>
-        </article>
-
-        <!-- MIDDLE CARD -->
-        <article class="digit-card" id="card-middle">
-          <div class="card-head">
-            <div class="digit-id-group">
-              <span class="digit-badge">3</span>
-              <h2 class="digit-name">MIDDLE</h2>
-            </div>
-            <div class="card-head-badges">
-              <span class="focal-pill" id="focal-pill-middle" style="display: none; background: rgba(56, 189, 248, 0.2); border: 1px solid #38bdf8; color: #38bdf8; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px;">🎯 FOCAL</span>
-              <span class="digit-intent-pill" id="intent-pill-middle" style="display: none; background: rgba(168, 85, 247, 0.2); border: 1px solid #a855f7; color: #e9d5ff; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px;">INTENT</span>
-              <span class="finger-motion-pill" id="motion-pill-middle">⏹ STILL</span>
-              <div class="state-pill state-uncertain" id="pill-middle">UNCERTAIN</div>
-            </div>
-          </div>
-          <div class="metrics-row">
-            <div class="ext-gauge">
-              <div class="gauge-labels">
-                <span>Extension Ratio (R_ext)</span>
-                <span id="rext-middle" class="gauge-num">0.00</span>
-              </div>
-              <div class="gauge-track"><div id="gauge-bar-middle" class="gauge-fill"></div></div>
-            </div>
-            <div class="angles-block">
-              <div class="angle-tag">MCP: <strong id="mcp-middle">0°</strong></div>
-              <div class="angle-tag">PIP: <strong id="pip-middle">0°</strong></div>
-              <div class="angle-tag">DIP: <strong id="dip-middle">0°</strong></div>
-            </div>
-          </div>
-          <div class="card-foot">
-            <span class="diag-label">Triggered by:</span>
-            <span id="diag-middle" class="diag-text">Awaiting hand observation...</span>
-          </div>
-        </article>
-
-        <!-- RING CARD -->
-        <article class="digit-card" id="card-ring">
-          <div class="card-head">
-            <div class="digit-id-group">
-              <span class="digit-badge">4</span>
-              <h2 class="digit-name">RING</h2>
-            </div>
-            <div class="card-head-badges">
-              <span class="focal-pill" id="focal-pill-ring" style="display: none; background: rgba(56, 189, 248, 0.2); border: 1px solid #38bdf8; color: #38bdf8; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px;">🎯 FOCAL</span>
-              <span class="digit-intent-pill" id="intent-pill-ring" style="display: none; background: rgba(168, 85, 247, 0.2); border: 1px solid #a855f7; color: #e9d5ff; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px;">INTENT</span>
-              <span class="finger-motion-pill" id="motion-pill-ring">⏹ STILL</span>
-              <div class="state-pill state-uncertain" id="pill-ring">UNCERTAIN</div>
-            </div>
-          </div>
-          <div class="metrics-row">
-            <div class="ext-gauge">
-              <div class="gauge-labels">
-                <span>Extension Ratio (R_ext)</span>
-                <span id="rext-ring" class="gauge-num">0.00</span>
-              </div>
-              <div class="gauge-track"><div id="gauge-bar-ring" class="gauge-fill"></div></div>
-            </div>
-            <div class="angles-block">
-              <div class="angle-tag">MCP: <strong id="mcp-ring">0°</strong></div>
-              <div class="angle-tag">PIP: <strong id="pip-ring">0°</strong></div>
-              <div class="angle-tag">DIP: <strong id="dip-ring">0°</strong></div>
-            </div>
-          </div>
-          <div class="card-foot">
-            <span class="diag-label">Triggered by:</span>
-            <span id="diag-ring" class="diag-text">Awaiting hand observation...</span>
-          </div>
-        </article>
-
-        <!-- LITTLE CARD -->
-        <article class="digit-card" id="card-little">
-          <div class="card-head">
-            <div class="digit-id-group">
-              <span class="digit-badge">5</span>
-              <h2 class="digit-name">LITTLE</h2>
-            </div>
-            <div class="card-head-badges">
-              <span class="focal-pill" id="focal-pill-little" style="display: none; background: rgba(56, 189, 248, 0.2); border: 1px solid #38bdf8; color: #38bdf8; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px;">🎯 FOCAL</span>
-              <span class="digit-intent-pill" id="intent-pill-little" style="display: none; background: rgba(168, 85, 247, 0.2); border: 1px solid #a855f7; color: #e9d5ff; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px;">INTENT</span>
-              <span class="finger-motion-pill" id="motion-pill-little">⏹ STILL</span>
-              <div class="state-pill state-uncertain" id="pill-little">UNCERTAIN</div>
-            </div>
-          </div>
-          <div class="metrics-row">
-            <div class="ext-gauge">
-              <div class="gauge-labels">
-                <span>Extension Ratio (R_ext)</span>
-                <span id="rext-little" class="gauge-num">0.00</span>
-              </div>
-              <div class="gauge-track"><div id="gauge-bar-little" class="gauge-fill"></div></div>
-            </div>
-            <div class="angles-block">
-              <div class="angle-tag">MCP: <strong id="mcp-little">0°</strong></div>
-              <div class="angle-tag">PIP: <strong id="pip-little">0°</strong></div>
-              <div class="angle-tag">DIP: <strong id="dip-little">0°</strong></div>
-            </div>
-          </div>
-          <div class="card-foot">
-            <span class="diag-label">Triggered by:</span>
-            <span id="diag-little" class="diag-text">Awaiting hand observation...</span>
-          </div>
-        </article>
-      </div>
     </section>
   </main>
 

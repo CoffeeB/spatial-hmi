@@ -79,6 +79,9 @@ class HandTelemetry(BaseModel):
     # Stability Engine Telemetry
     stability_telemetry: Dict[str, Any] = {}
 
+    # Continuous 3D Spatial Representation & Perception Telemetry
+    spatial_telemetry: Dict[str, Any] = {}
+
 
 class HMIPacket(BaseModel):
     """
