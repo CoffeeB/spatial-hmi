@@ -154,22 +154,30 @@ class EvidenceFusion:
                 f"Temporal evidence dominant (w={weights.temporal_weight:.2f})"
             )
 
+        if viewpoint.mode in (ViewpointMode.CAMERA_FACING, ViewpointMode.FORESHORTENED):
+            return (
+                ActiveRepresentation.FINGER_CENTRIC,
+                f"Camera-facing viewpoint ({viewpoint.mode.value}) — shifting evidence to finger geometry (w_finger={weights.finger_weight:.2f}, w_palm={weights.palm_weight:.2f})"
+            )
+
         hc = viewpoint.hand_geometry_confidence
         fc = viewpoint.finger_geometry_confidence
         diff = hc - fc
 
-        if diff > 0.22:
+        if weights.finger_weight > weights.palm_weight + 0.15 or diff < -0.15:
+            return (
+                ActiveRepresentation.FINGER_CENTRIC,
+                f"Finger geometry dominant (w_finger={weights.finger_weight:.2f} vs w_palm={weights.palm_weight:.2f})"
+            )
+
+        if weights.palm_weight > weights.finger_weight + 0.15 or diff > 0.18:
             return (
                 ActiveRepresentation.HAND_CENTRIC,
                 f"Hand geometry dominant (hand={hc:.2f} vs finger={fc:.2f})"
-            )
-        if diff < -0.18:
-            return (
-                ActiveRepresentation.FINGER_CENTRIC,
-                f"Finger geometry dominant (finger={fc:.2f} vs hand={hc:.2f})"
             )
 
         return (
             ActiveRepresentation.COMBINED,
             f"Combined evidence (hand={hc:.2f}, finger={fc:.2f})"
         )
+

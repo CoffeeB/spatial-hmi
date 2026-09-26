@@ -288,6 +288,10 @@ class FingerStateClassifier:
         detection_confidence: float = 1.0,
         visibilities: Optional[List[float]] = None,
         timestamp: float = 0.0,
+        chain_states: Optional[Dict[str, Any]] = None,
+        viewpoint_mode: Optional[str] = None,
+        active_representation: Optional[str] = None,
+        external_ratios: Optional[Dict[str, float]] = None,
     ) -> HandFingerStates:
         """
         Classifies all 5 fingers of the hand into their discrete states.
@@ -298,8 +302,17 @@ class FingerStateClassifier:
             detection_confidence: Overall detector confidence [0, 1].
             visibilities: Optional per-landmark visibility scores [0, 1].
             timestamp: Time of frame capture.
+            chain_states: Optional Dict[str, FingerChainState] from FingerChainAnalyzer.
+            viewpoint_mode: Viewpoint mode string (e.g. CAMERA_FACING, FORESHORTENED).
+            active_representation: Active representation string (e.g. FINGER_CENTRIC, HAND_CENTRIC).
+            external_ratios: Optional pre-fused extension ratios.
         """
         local_pts, _, d_ref, palm_facing = self._build_hand_local_frame(raw_landmarks, handedness)
+
+        is_camera_facing = bool(
+            (viewpoint_mode in ("CAMERA_FACING", "FORESHORTENED"))
+            or (active_representation == "FINGER_CENTRIC")
+        )
 
         # Check frame edge clipping or low detector confidence -> uncertain
         p0 = raw_landmarks[0]
@@ -309,7 +322,7 @@ class FingerStateClassifier:
 
         inner_hand_visible = bool(palm_facing == "PALM")
         is_edge = (p0[0] < 0.04 or p0[0] > 0.96 or p0[1] < 0.04 or p0[1] > 0.96)
-        global_uncertain = (detection_confidence < 0.40) or is_edge
+        global_uncertain = (detection_confidence < 0.35) or is_edge
 
         # Tips & MCP references
         p_thumb_tip = raw_landmarks[4]
@@ -329,28 +342,40 @@ class FingerStateClassifier:
         # Palm center reference in world coords
         p_palm_center = (raw_landmarks[0] + raw_landmarks[5] + raw_landmarks[9] + raw_landmarks[17]) / 4.0
 
-        # Calculate extension ratios: dist(tip, wrist) / dist(mcp, wrist) for fingers 2-5,
-        # and biomechanically grounded continuous ratio for thumb.
-        p_wrist = raw_landmarks[0]
-        p_index_mcp = raw_landmarks[5]
+        # Calculate extension ratios
+        if external_ratios:
+            ext_ratios = dict(external_ratios)
+        else:
+            p_wrist = raw_landmarks[0]
+            p_index_mcp = raw_landmarks[5]
+            ext_ratios = {}
+            for f_name, idx_map in FINGER_INDICES.items():
+                if f_name == "thumb":
+                    p1 = raw_landmarks[1]
+                    p2 = raw_landmarks[2]
+                    p3 = raw_landmarks[3]
+                    p4 = raw_landmarks[4]
+                    L_thumb = np.linalg.norm(p2 - p1) + np.linalg.norm(p3 - p2) + np.linalg.norm(p4 - p3)
+                    straightness_thumb = float(np.linalg.norm(p4 - p1) / max(L_thumb, 1e-4))
+                    abduction_thumb = float(np.linalg.norm(p4 - p_index_mcp) / d_ref)
+                    d_thumb_palm_init = float(np.linalg.norm(p4 - p_palm_center) / d_ref)
+                    thumb_ratio = straightness_thumb * (0.50 + 1.10 * abduction_thumb + 0.40 * d_thumb_palm_init)
+                    ext_ratios[f_name] = float(np.clip(thumb_ratio, 0.35, 2.20))
+                else:
+                    d_tip = np.linalg.norm(raw_landmarks[idx_map["tip"]] - p_wrist)
+                    d_mcp = max(np.linalg.norm(raw_landmarks[idx_map["mcp"]] - p_wrist), 1e-4)
+                    ext_ratios[f_name] = float(d_tip / d_mcp)
 
-        ext_ratios = {}
-        for f_name, idx_map in FINGER_INDICES.items():
-            if f_name == "thumb":
-                p1 = raw_landmarks[1]
-                p2 = raw_landmarks[2]
-                p3 = raw_landmarks[3]
-                p4 = raw_landmarks[4]
-                L_thumb = np.linalg.norm(p2 - p1) + np.linalg.norm(p3 - p2) + np.linalg.norm(p4 - p3)
-                straightness_thumb = float(np.linalg.norm(p4 - p1) / max(L_thumb, 1e-4))
-                abduction_thumb = float(np.linalg.norm(p4 - p_index_mcp) / d_ref)
-                d_thumb_palm_init = float(np.linalg.norm(p4 - p_palm_center) / d_ref)
-                thumb_ratio = straightness_thumb * (0.50 + 1.10 * abduction_thumb + 0.40 * d_thumb_palm_init)
-                ext_ratios[f_name] = float(np.clip(thumb_ratio, 0.35, 2.20))
-            else:
-                d_tip = np.linalg.norm(raw_landmarks[idx_map["tip"]] - p_wrist)
-                d_mcp = max(np.linalg.norm(raw_landmarks[idx_map["mcp"]] - p_wrist), 1e-4)
-                ext_ratios[f_name] = float(d_tip / d_mcp)
+            # If chain states are available and hand is camera facing / foreshortened,
+            # override collapsing 2D ratios with 3D chain ratios
+            if chain_states and is_camera_facing:
+                for f_name, cs in chain_states.items():
+                    feat_k = "pinky" if f_name == "little" else f_name
+                    chord = float(np.linalg.norm(cs.tip_3d - cs.mcp_3d))
+                    straightness = chord / max(cs.chain_length_3d, 1e-4)
+                    flex_pen = (cs.pip_flexion_deg + cs.dip_flexion_deg) / 180.0
+                    chain_r = float(np.clip(0.65 + 1.10 * straightness - 0.55 * flex_pen, 0.40, 2.10))
+                    ext_ratios[feat_k] = chain_r
 
         # Calculate inter-digit tip-to-thumb distances normalized by d_ref
         thumb_tip_dist = {
@@ -456,16 +481,19 @@ class FingerStateClassifier:
 
             # --- 3. Check FOLDED / TUCKED (Balled into fist: All joints curled deep into palm) ---
             if state == FingerStateEnum.UNCERTAIN:
-                # Curled check works for both palm and dorsal views
-                # When dorsal side faces camera, MCP and PIP angles are flexed towards palm
-                is_curled = (
-                    (ext_r <= 0.96 or d_to_palm <= 0.54)
-                    and (angle_pip >= 55.0 or angle_mcp >= 40.0)
-                    and (d_to_palm <= 0.62 or ext_r <= 0.92)
-                ) or (
-                    # Direct dorsal view curled knuckle signature
-                    palm_facing == "DORSAL" and angle_mcp >= 40.0 and angle_pip >= 48.0 and ext_r <= 1.05
-                )
+                if is_camera_facing:
+                    # In camera-facing view, do NOT rely on 2D palm distance (which collapses end-on)
+                    # Instead require genuine 3D joint flexion across PIP/MCP joints
+                    is_curled = (angle_pip >= 50.0 and (angle_mcp >= 35.0 or angle_dip >= 35.0)) or (angle_pip >= 58.0)
+                else:
+                    is_curled = (
+                        (ext_r <= 0.96 or d_to_palm <= 0.54)
+                        and (angle_pip >= 55.0 or angle_mcp >= 40.0)
+                        and (d_to_palm <= 0.62 or ext_r <= 0.92)
+                    ) or (
+                        # Direct dorsal view curled knuckle signature
+                        palm_facing == "DORSAL" and angle_mcp >= 40.0 and angle_pip >= 48.0 and ext_r <= 1.05
+                    )
 
                 if is_curled:
                     d_thumb_knuckle = float(np.linalg.norm(tips[f_name] - raw_landmarks[2]) / d_ref)
@@ -501,7 +529,7 @@ class FingerStateClassifier:
                     contact_target = closest_neighbor
                     confidence = 0.85
                     diags.append(f"Adducted touching {closest_neighbor} ({closest_dist:.2f} d_ref)")
-                elif d_to_palm <= self.touch_thresh and ext_r < 0.92 and angle_pip < 80.0:
+                elif not is_camera_facing and d_to_palm <= self.touch_thresh and ext_r < 0.92 and angle_pip < 80.0:
                     state = FingerStateEnum.TOUCHING
                     contact_target = "palm"
                     confidence = 0.82
@@ -509,27 +537,47 @@ class FingerStateClassifier:
 
             # --- 6. Check EXTENDED / CURVED / RELAXED ---
             if state == FingerStateEnum.UNCERTAIN:
-                if ext_r >= 1.15 and angle_pip <= 28.0 and angle_dip <= 25.0:
-                    state = FingerStateEnum.EXTENDED
-                    confidence = float(np.clip(0.70 + (ext_r - 1.15) * 0.8, 0.75, 0.99))
-                    diags.append(f"Straight extended (ext_r={ext_r:.2f}, PIP={angle_pip:.1f}deg)")
-                elif 32.0 <= angle_pip <= 78.0 and 22.0 <= angle_dip <= 65.0 and 0.88 <= ext_r <= 1.14:
-                    state = FingerStateEnum.CURVED
-                    confidence = 0.85
-                    diags.append(f"Curved arc across joints (PIP={angle_pip:.1f}deg, DIP={angle_dip:.1f}deg)")
-                elif 12.0 <= angle_pip <= 38.0 and 8.0 <= angle_dip <= 32.0 and 0.98 <= ext_r <= 1.18:
-                    state = FingerStateEnum.RELAXED
-                    confidence = 0.82
-                    diags.append(f"Neutral resting drop (PIP={angle_pip:.1f}deg)")
-                elif ext_r >= 1.10:
-                    state = FingerStateEnum.EXTENDED
-                    confidence = 0.65
-                elif ext_r <= 0.90:
-                    state = FingerStateEnum.FOLDED
-                    confidence = 0.65
+                if is_camera_facing:
+                    # In camera-facing view, low PIP/DIP flexion means the digit is extended toward the camera
+                    if angle_pip <= 32.0 and angle_dip <= 28.0:
+                        state = FingerStateEnum.EXTENDED
+                        confidence = float(np.clip(0.80 + max(ext_r - 1.0, 0.0) * 0.5, 0.85, 0.99))
+                        diags.append(f"[Finger-Centric] Camera-facing extension (PIP={angle_pip:.1f}deg, DIP={angle_dip:.1f}deg, ext_r={ext_r:.2f})")
+                    elif 32.0 < angle_pip <= 65.0 and angle_dip <= 55.0:
+                        state = FingerStateEnum.CURVED
+                        confidence = 0.85
+                        diags.append(f"[Finger-Centric] Camera-facing curved arc (PIP={angle_pip:.1f}deg)")
+                    elif ext_r >= 1.10:
+                        state = FingerStateEnum.EXTENDED
+                        confidence = 0.80
+                    elif angle_pip >= 48.0:
+                        state = FingerStateEnum.FOLDED
+                        confidence = 0.80
+                    else:
+                        state = FingerStateEnum.RELAXED
+                        confidence = 0.70
                 else:
-                    state = FingerStateEnum.RELAXED
-                    confidence = 0.60
+                    if ext_r >= 1.15 and angle_pip <= 28.0 and angle_dip <= 25.0:
+                        state = FingerStateEnum.EXTENDED
+                        confidence = float(np.clip(0.70 + (ext_r - 1.15) * 0.8, 0.75, 0.99))
+                        diags.append(f"Straight extended (ext_r={ext_r:.2f}, PIP={angle_pip:.1f}deg)")
+                    elif 32.0 <= angle_pip <= 78.0 and 22.0 <= angle_dip <= 65.0 and 0.88 <= ext_r <= 1.14:
+                        state = FingerStateEnum.CURVED
+                        confidence = 0.85
+                        diags.append(f"Curved arc across joints (PIP={angle_pip:.1f}deg, DIP={angle_dip:.1f}deg)")
+                    elif 12.0 <= angle_pip <= 38.0 and 8.0 <= angle_dip <= 32.0 and 0.98 <= ext_r <= 1.18:
+                        state = FingerStateEnum.RELAXED
+                        confidence = 0.82
+                        diags.append(f"Neutral resting drop (PIP={angle_pip:.1f}deg)")
+                    elif ext_r >= 1.10:
+                        state = FingerStateEnum.EXTENDED
+                        confidence = 0.65
+                    elif ext_r <= 0.90:
+                        state = FingerStateEnum.FOLDED
+                        confidence = 0.65
+                    else:
+                        state = FingerStateEnum.RELAXED
+                        confidence = 0.60
 
             classified_digits[f_name] = FingerStateDetail(
                 finger=f_name,
@@ -581,7 +629,9 @@ class FingerStateClassifier:
         # C) Behind-the-palm depth occlusion from camera viewpoint
         # If camera sees PALM, thumb is behind palm if loc_z < -0.12 (on dorsal side behind palm)
         # If camera sees DORSAL, thumb is on radial border (+X); it's only hidden if tucked deep inside palm (loc_z > 0.22 and centered)
-        if palm_facing == "PALM":
+        if is_camera_facing:
+            is_behind_palm = False
+        elif palm_facing == "PALM":
             is_behind_palm = bool(loc_thumb_tip[2] < -0.12 and abs(loc_thumb_tip[0]) < 0.32 and loc_thumb_tip[1] > 0.05)
         elif palm_facing == "DORSAL":
             is_behind_palm = bool(loc_thumb_tip[2] > 0.22 and abs(loc_thumb_tip[0]) < 0.25 and loc_thumb_tip[1] > 0.05)

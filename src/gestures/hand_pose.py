@@ -319,6 +319,8 @@ class HandPoseClassifier:
         raw_landmarks: np.ndarray,
         d_ref: float,
         orientation_angles: Tuple[float, float, float] = (0.0, 0.0, 0.0),
+        active_representation: Optional[str] = None,
+        viewpoint_mode: Optional[str] = None,
     ) -> DerivedHandPose:
         """
         Derives the active Level 1 Hand Pose from the Finger Configuration.

@@ -58,6 +58,9 @@ class HandPerceptionObject:
     stability_score: float = 1.0
     derived_pose: Optional[str] = None
     discrete_gesture: Optional[str] = None
+    active_representation: str = "HAND_CENTRIC"
+    viewpoint_mode: str = "NORMAL"
+    finger_centric: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, any]:
         """
@@ -104,4 +107,7 @@ class HandPerceptionObject:
                 "derived_pose": self.derived_pose,
                 "discrete_gesture": self.discrete_gesture,
             },
+            "active_representation": self.active_representation,
+            "viewpoint_mode": self.viewpoint_mode,
+            "finger_centric": self.finger_centric or {},
         }

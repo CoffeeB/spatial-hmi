@@ -258,6 +258,14 @@ class FingerCentricPerceptionEngine:
             timestamp=timestamp,
         )
 
+    def compute_chain_extension_ratio(self, chain: FingerChainState) -> float:
+        """Derive 3D continuous extension ratio for a single chain."""
+        return self._chain_analyzer.compute_chain_extension_ratio(chain)
+
+    def compute_chain_extension_ratios(self, chain_states: Dict[str, FingerChainState]) -> Dict[str, float]:
+        """Derive 3D continuous extension ratios for all finger chains."""
+        return self._chain_analyzer.compute_all_chain_extension_ratios(chain_states)
+
     def prune_missing_hands(self, active_hand_ids: List[int]) -> None:
         """Remove all per-hand state for hands that are no longer in frame."""
         for hand_id in list(self._tip_trackers.keys()):

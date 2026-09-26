@@ -41,11 +41,17 @@ class FingerStateLab {
     this.ctx = this.canvas ? this.canvas.getContext("2d") : null;
     this.sensorPlaceholder = document.getElementById("sensor-placeholder");
 
-    // Display Toggles (Bearing Axes & Joint Angles)
+    // Display Toggles (Bearing Axes & Joint Angles) - Clean feed by default
     this.toggleAxesBtn = document.getElementById("toggle-axes-btn");
     this.toggleAnglesBtn = document.getElementById("toggle-angles-btn");
-    this.showAxes = true;
-    this.showAngles = true;
+    this.showAxes = false;
+    this.showAngles = false;
+
+    // Perception Mode Badges (Header & Feed Overlay)
+    this.perceptionModeChip = document.getElementById("perception-mode-chip");
+    this.perceptionModeText = document.getElementById("perception-mode-text");
+    this.feedPerceptionBadge = document.getElementById("feed-perception-badge");
+    this.feedPerceptionText = document.getElementById("feed-perception-text");
 
     // Kinematic Values
     this.kPitchVal = document.getElementById("k-pitch-val");
@@ -611,6 +617,35 @@ class FingerStateLab {
     }
     if (this.trackingConfLabel) {
       this.trackingConfLabel.textContent = `Conf: ${primary.detection_confidence.toFixed(2)}`;
+    }
+
+    // Active Perception Mode (Hand-Centric vs Finger-Centric Dynamic Shift)
+    const activeRep = primary.active_representation || "HAND_CENTRIC";
+    const vpMode = primary.viewpoint_mode || "NORMAL";
+    const isFingerCentric = activeRep === "FINGER_CENTRIC";
+
+    if (this.perceptionModeText) {
+      if (isFingerCentric) {
+        this.perceptionModeText.textContent = `FINGER-CENTRIC [${vpMode}]`;
+        if (this.perceptionModeChip) {
+          this.perceptionModeChip.className = "status-chip perception-mode-chip finger-centric";
+        }
+      } else {
+        this.perceptionModeText.textContent = `HAND-CENTRIC [${vpMode}]`;
+        if (this.perceptionModeChip) {
+          this.perceptionModeChip.className = "status-chip perception-mode-chip hand-centric";
+        }
+      }
+    }
+
+    if (this.feedPerceptionBadge && this.feedPerceptionText) {
+      if (isFingerCentric) {
+        this.feedPerceptionText.textContent = `⚡ FINGER-CENTRIC [${vpMode}]`;
+        this.feedPerceptionBadge.className = "feed-perception-badge finger-centric";
+      } else {
+        this.feedPerceptionText.textContent = `HAND-CENTRIC [${vpMode}]`;
+        this.feedPerceptionBadge.className = "feed-perception-badge hand-centric";
+      }
     }
 
     // 4. Update Kinematics Orientation & Level 2 Motion
@@ -1198,7 +1233,9 @@ class FingerStateLab {
       // 5. Floating Identity & Pose Badge at Wrist
       const [wx, wy] = toCanvas(pts[0]);
       const facingStr = isDorsal ? " • DORSAL" : (hand.palm_facing ? ` • ${hand.palm_facing}` : "");
-      const badgeText = `${hand.handedness ? hand.handedness.toUpperCase() : "HAND"}: ${poseName}${facingStr}`;
+      const isFC = hand.active_representation === "FINGER_CENTRIC" || hand.viewpoint_mode === "CAMERA_FACING";
+      const repTag = isFC ? " • ⚡ FINGER-CENTRIC" : "";
+      const badgeText = `${hand.handedness ? hand.handedness.toUpperCase() : "HAND"}: ${poseName}${facingStr}${repTag}`;
       ctx.save();
       ctx.font = "bold 12px 'SF Pro Display', -apple-system, sans-serif";
       const textMetrics = ctx.measureText(badgeText);
@@ -1208,9 +1245,9 @@ class FingerStateLab {
       const badgeY = Math.max(8, Math.min(h - badgeH - 8, wy + 16));
 
       // Badge pill background
-      ctx.fillStyle = "rgba(10, 15, 29, 0.85)";
-      ctx.strokeStyle = isDorsal ? "#f59e0b" : wristAccent;
-      ctx.lineWidth = 1.5;
+      ctx.fillStyle = isFC ? "rgba(6, 24, 18, 0.92)" : "rgba(10, 15, 29, 0.85)";
+      ctx.strokeStyle = isFC ? "#10b981" : (isDorsal ? "#f59e0b" : wristAccent);
+      ctx.lineWidth = isFC ? 2.0 : 1.5;
       ctx.beginPath();
       const r = 6;
       if (ctx.roundRect) {
@@ -1346,6 +1383,43 @@ class FingerStateLab {
           ctx.stroke();
           ctx.restore();
         }
+      }
+
+      // 9. Render High-Precision Focal Reticle under Finger-Centric Mode
+      if (hand.active_representation === "FINGER_CENTRIC" || hand.viewpoint_mode === "CAMERA_FACING") {
+        const [fx, fy] = toCanvas(pts[8]); // Index tip is primary pointing vector
+        ctx.save();
+        // Outer glowing ring
+        ctx.beginPath();
+        ctx.arc(fx, fy, 16, 0, Math.PI * 2);
+        ctx.strokeStyle = "#10b981";
+        ctx.lineWidth = 2.2;
+        ctx.shadowColor = "#10b981";
+        ctx.shadowBlur = 12;
+        ctx.stroke();
+
+        // Crosshairs
+        const tLen = 6;
+        ctx.strokeStyle = "#34d399";
+        ctx.lineWidth = 1.6;
+        [
+          [fx - 22, fy, fx - 22 + tLen, fy],
+          [fx + 22 - tLen, fy, fx + 22, fy],
+          [fx, fy - 22, fx, fy - 22 + tLen],
+          [fx, fy + 22 - tLen, fx, fy + 22],
+        ].forEach(([x1, y1, x2, y2]) => {
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+          ctx.stroke();
+        });
+
+        // Center focal core
+        ctx.beginPath();
+        ctx.arc(fx, fy, 3.5, 0, Math.PI * 2);
+        ctx.fillStyle = "#ffffff";
+        ctx.fill();
+        ctx.restore();
       }
     });
   }
@@ -1529,6 +1603,15 @@ class FingerStateLab {
     if (this.cgDur) this.cgDur.textContent = "--";
     if (this.cgEventChain) {
       this.cgEventChain.innerHTML = `<span class="seq-step-item active">OBSERVING</span>`;
+    }
+
+    if (this.perceptionModeText) {
+      this.perceptionModeText.textContent = "HAND-CENTRIC [IDLE]";
+      if (this.perceptionModeChip) this.perceptionModeChip.className = "status-chip perception-mode-chip hand-centric";
+    }
+    if (this.feedPerceptionBadge && this.feedPerceptionText) {
+      this.feedPerceptionText.textContent = "HAND-CENTRIC [IDLE]";
+      this.feedPerceptionBadge.className = "feed-perception-badge hand-centric";
     }
 
     this._resetTemporalIntentOverlay();

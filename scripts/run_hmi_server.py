@@ -256,6 +256,17 @@ def main():
                         temporal_telemetry=getattr(h, "temporal_telemetry", {}) or {},
                         stability_telemetry=getattr(h, "stability_telemetry", {}) or {},
                         spatial_telemetry=getattr(h, "spatial_telemetry", {}) or {},
+                        active_representation=(
+                            h.finger_centric.fusion.active_representation.value
+                            if (getattr(h, "finger_centric", None) and hasattr(h.finger_centric, "fusion"))
+                            else "HAND_CENTRIC"
+                        ),
+                        viewpoint_mode=(
+                            h.finger_centric.viewpoint.mode.value
+                            if (getattr(h, "finger_centric", None) and hasattr(h.finger_centric, "viewpoint"))
+                            else "NORMAL"
+                        ),
+                        finger_centric_telemetry=getattr(h, "finger_centric_telemetry", {}) or {},
                     )
                 )
 

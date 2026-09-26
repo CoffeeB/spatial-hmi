@@ -77,6 +77,34 @@ class FingerChainAnalyzer:
     single pair of landmarks. Detects foreshortening and camera-facing orientations.
     """
 
+    @staticmethod
+    def compute_chain_extension_ratio(chain: FingerChainState) -> float:
+        """
+        Computes continuous extension ratio derived strictly from 3D articulated chain geometry.
+        Unlike 2D projected dist(tip, wrist) / dist(mcp, wrist), this remains invariant
+        under severe camera-facing foreshortening.
+        
+        Returns:
+            ratio: ~1.40-1.75 when straight/extended, ~1.05-1.20 when relaxed, ~0.50-0.80 when curled/folded.
+        """
+        chord = float(np.linalg.norm(chain.tip_3d - chain.mcp_3d))
+        straightness = chord / max(chain.chain_length_3d, 1e-4)
+        flex_pen = (chain.pip_flexion_deg + chain.dip_flexion_deg) / 180.0
+
+        # When finger points straight toward camera:
+        # straightness is high (~0.90-0.98), flex_pen is low (< 0.25).
+        # When balled into fist: straightness is low (< 0.50), flex_pen is high (> 0.70).
+        ratio = 0.65 + 1.10 * straightness - 0.55 * flex_pen
+        return float(np.clip(ratio, 0.40, 2.10))
+
+    def compute_all_chain_extension_ratios(self, chain_states: Dict[str, FingerChainState]) -> Dict[str, float]:
+        """Maps finger names to kinematic feature keys ('thumb', 'index', 'middle', 'ring', 'pinky')."""
+        out = {}
+        for name, cs in chain_states.items():
+            key = "pinky" if name == "little" else name
+            out[key] = self.compute_chain_extension_ratio(cs)
+        return out
+
     def analyze(
         self,
         raw_landmarks: np.ndarray,      # (21, 3)

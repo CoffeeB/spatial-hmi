@@ -42,6 +42,12 @@
         </div>
       </div>
 
+      <!-- ACTIVE PERCEPTION MODE BANNER (HAND-CENTRIC VS FINGER-CENTRIC) -->
+      <div id="perception-mode-chip" class="status-chip perception-mode-chip hand-centric">
+        <span class="chip-label">PERCEPTION:</span>
+        <strong id="perception-mode-text">HAND-CENTRIC</strong>
+      </div>
+
       <div id="fps-chip" class="status-chip chip-data">-- FPS</div>
       <div id="latency-chip" class="status-chip chip-data">-- MS</div>
     </div>
@@ -57,10 +63,10 @@
       <button id="toggle-temporal-overlay-btn" class="action-btn" title="Toggle Temporal Intent HUD">
         <span>TEMPORAL INTENT HUD</span>
       </button>
-      <button id="toggle-axes-btn" class="action-btn active" title="Toggle 3D Coordinate Frame Axes">
+      <button id="toggle-axes-btn" class="action-btn" title="Toggle 3D Coordinate Frame Axes">
         <span>3D LOCAL FRAME</span>
       </button>
-      <button id="toggle-angles-btn" class="action-btn active" title="Toggle Joint Angles Overlay">
+      <button id="toggle-angles-btn" class="action-btn" title="Toggle Joint Angles Overlay">
         <span>JOINT ANGLES</span>
       </button>
       <button id="record-btn" class="action-btn record-action">
@@ -96,422 +102,10 @@
         <img id="camera-screen-feed" class="camera-screen-feed" alt="Live Hand Sensor Stream" />
         <canvas id="hand-skeleton-canvas" class="hand-skeleton-canvas"></canvas>
 
-        <!-- DEVELOPER DEBUG OVERLAY: CONTINUOUS 3D SPATIAL REPRESENTATION -->
-        <div id="spatial-representation-overlay" class="spatial-representation-overlay hidden">
-          <div class="overlay-header">
-            <div class="overlay-title-group">
-              <span class="overlay-live-dot spatial-dot"></span>
-              <span class="overlay-title">SPATIAL 3D REPRESENTATION</span>
-              <span id="spatial-lifecycle-pill" class="intent-state-pill spatial-stable">STABLE</span>
-              <span id="spatial-ambiguity-pill" class="spatial-ambiguity-pill amb-low">AMB: LOW</span>
-              <span id="spatial-facing-pill" class="dorsal-pill">PALM</span>
-              <span id="spatial-foreshorten-pill" class="foreshorten-pill hidden">FORESHORTENED</span>
-            </div>
-            <div class="overlay-perf-group">
-              <span class="overlay-perf-label">CONF:</span>
-              <span id="spatial-conf-header" class="overlay-perf-val highlight-val">0.96</span>
-              <button id="close-spatial-btn" class="overlay-close-btn" title="Toggle Compact Mode">─</button>
-            </div>
-          </div>
-
-          <!-- SPATIAL HUD BODY -->
-          <div class="spatial-hud-grid">
-            <!-- 1. CONTINUOUS VECTOR & MOTION COLUMN -->
-            <div class="spatial-hud-col">
-              <div class="spatial-subhead">CONTINUOUS KINEMATICS & VECTORS</div>
-              <div class="spatial-metric-row">
-                <span class="s-lbl">2D Screen Vector:</span>
-                <span id="spatial-vec2d-val" class="s-val font-mono">(0.00, 0.00)</span>
-              </div>
-              <div class="spatial-metric-row">
-                <span class="s-lbl">Continuous Heading:</span>
-                <span id="spatial-heading-val" class="s-val">0.0°</span>
-              </div>
-              <div class="spatial-metric-row">
-                <span class="s-lbl">3D Velocity:</span>
-                <span id="spatial-vel3d-val" class="s-val font-mono">(0.00, 0.00, 0.00)</span>
-              </div>
-              <div class="spatial-metric-row">
-                <span class="s-lbl">Speed (3D / XY / Z):</span>
-                <span id="spatial-speed-val" class="s-val">0.00 | 0.00 | 0.00</span>
-              </div>
-              <div class="spatial-metric-row">
-                <span class="s-lbl">Depth Kinematics:</span>
-                <span id="spatial-depth-val" class="s-val highlight-cyan">NEUTRAL</span>
-              </div>
-              <div class="spatial-metric-row">
-                <span class="s-lbl">Hand Basis Normal:</span>
-                <span id="spatial-normal-val" class="s-val font-mono">(0.00, 0.00, -1.00)</span>
-              </div>
-            </div>
-
-            <!-- 2. 8-SECTOR SOFT PROBABILITY & GREY ZONE COLUMN -->
-            <div class="spatial-hud-col">
-              <div class="spatial-subhead">8-SECTOR SOFT PROBABILITY (GREY ZONE)</div>
-              
-              <!-- Sector distribution visualizer bars -->
-              <div class="sector-prob-grid">
-                <div class="sector-bar-item" id="sec-bar-top-left">
-                  <span class="sec-label">TL</span>
-                  <div class="sec-bar-track"><div class="sec-bar-fill" style="width: 0%;"></div></div>
-                  <span class="sec-val">0.00</span>
-                </div>
-                <div class="sector-bar-item" id="sec-bar-top">
-                  <span class="sec-label">TOP</span>
-                  <div class="sec-bar-track"><div class="sec-bar-fill" style="width: 0%;"></div></div>
-                  <span class="sec-val">0.00</span>
-                </div>
-                <div class="sector-bar-item" id="sec-bar-top-right">
-                  <span class="sec-label">TR</span>
-                  <div class="sec-bar-track"><div class="sec-bar-fill" style="width: 0%;"></div></div>
-                  <span class="sec-val">0.00</span>
-                </div>
-                <div class="sector-bar-item" id="sec-bar-left">
-                  <span class="sec-label">LEFT</span>
-                  <div class="sec-bar-track"><div class="sec-bar-fill" style="width: 0%;"></div></div>
-                  <span class="sec-val">0.00</span>
-                </div>
-                <div class="sector-bar-item" id="sec-bar-center">
-                  <span class="sec-label">CTR</span>
-                  <div class="sec-bar-track"><div class="sec-bar-fill" style="width: 100%;"></div></div>
-                  <span class="sec-val">1.00</span>
-                </div>
-                <div class="sector-bar-item" id="sec-bar-right">
-                  <span class="sec-label">RIGHT</span>
-                  <div class="sec-bar-track"><div class="sec-bar-fill" style="width: 0%;"></div></div>
-                  <span class="sec-val">0.00</span>
-                </div>
-                <div class="sector-bar-item" id="sec-bar-bottom-left">
-                  <span class="sec-label">BL</span>
-                  <div class="sec-bar-track"><div class="sec-bar-fill" style="width: 0%;"></div></div>
-                  <span class="sec-val">0.00</span>
-                </div>
-                <div class="sector-bar-item" id="sec-bar-bottom">
-                  <span class="sec-label">BTM</span>
-                  <div class="sec-bar-track"><div class="sec-bar-fill" style="width: 0%;"></div></div>
-                  <span class="sec-val">0.00</span>
-                </div>
-                <div class="sector-bar-item" id="sec-bar-bottom-right">
-                  <span class="sec-label">BR</span>
-                  <div class="sec-bar-track"><div class="sec-bar-fill" style="width: 0%;"></div></div>
-                  <span class="sec-val">0.00</span>
-                </div>
-              </div>
-
-              <!-- Primary / Secondary / Ambiguity summary -->
-              <div class="spatial-interpretation-strip">
-                <div class="interp-box">
-                  <span class="interp-lbl">INTERPRETATION:</span>
-                  <strong id="spatial-interp-val" class="interp-tag tag-primary">CENTER</strong>
-                </div>
-                <div class="interp-box">
-                  <span class="interp-lbl">SECONDARY:</span>
-                  <span id="spatial-sec-val" class="interp-secondary">NONE</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- 3. ARTICULATED DIGIT KINEMATICS COLUMN -->
-            <div class="spatial-hud-col">
-              <div class="spatial-subhead">ARTICULATED DIGIT KINEMATICS</div>
-              <div class="digit-geom-rows" id="spatial-digit-geom-rows">
-                <div class="digit-geom-item" id="digit-geom-thumb">
-                  <span class="d-name">THUMB</span>
-                  <span class="d-state">EXT</span>
-                  <div class="d-curl-track"><div class="d-curl-fill" style="width: 10%;"></div></div>
-                  <span class="d-curl-val">10%</span>
-                  <span class="d-dir-hand font-mono">(0.2, 0.9, 0.1)</span>
-                </div>
-                <div class="digit-geom-item" id="digit-geom-index">
-                  <span class="d-name">INDEX</span>
-                  <span class="d-state">EXT</span>
-                  <div class="d-curl-track"><div class="d-curl-fill" style="width: 5%;"></div></div>
-                  <span class="d-curl-val">5%</span>
-                  <span class="d-dir-hand font-mono">(0.0, 1.0, 0.0)</span>
-                </div>
-                <div class="digit-geom-item" id="digit-geom-middle">
-                  <span class="d-name">MIDDLE</span>
-                  <span class="d-state">EXT</span>
-                  <div class="d-curl-track"><div class="d-curl-fill" style="width: 5%;"></div></div>
-                  <span class="d-curl-val">5%</span>
-                  <span class="d-dir-hand font-mono">(0.0, 1.0, 0.0)</span>
-                </div>
-                <div class="digit-geom-item" id="digit-geom-ring">
-                  <span class="d-name">RING</span>
-                  <span class="d-state">EXT</span>
-                  <div class="d-curl-track"><div class="d-curl-fill" style="width: 8%;"></div></div>
-                  <span class="d-curl-val">8%</span>
-                  <span class="d-dir-hand font-mono">(0.0, 1.0, 0.0)</span>
-                </div>
-                <div class="digit-geom-item" id="digit-geom-little">
-                  <span class="d-name">LITTLE</span>
-                  <span class="d-state">EXT</span>
-                  <div class="d-curl-track"><div class="d-curl-fill" style="width: 12%;"></div></div>
-                  <span class="d-curl-val">12%</span>
-                  <span class="d-dir-hand font-mono">(-0.2, 0.9, 0.0)</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- UNCERTAINTY EXPLAINABILITY STRIP -->
-          <div class="overlay-explain-row spatial-uncertainty-strip">
-            <span class="explain-label">SPATIAL UNCERTAINTY REASONING:</span>
-            <span id="spatial-explain-text" class="explain-text">Continuous 3D articulated representation active. Observations modeled probabilistically without forced categorization.</span>
-          </div>
-        </div>
-
-        <!-- DEVELOPER DEBUG OVERLAY: STABILITY ENGINE -->
-        <div id="stability-engine-overlay" class="stability-engine-overlay hidden">
-          <div class="overlay-header">
-            <div class="overlay-title-group">
-              <span class="overlay-live-dot stability-dot"></span>
-              <span class="overlay-title">STABILITY ENGINE</span>
-              <span id="stab-category-pill" class="intent-state-pill stab-intentional">INTENTIONAL</span>
-              <span id="stab-lock-pill" class="intent-lock-pill unlocked">UNLOCKED</span>
-              <span id="stab-eligible-pill" class="intent-state-pill stab-eligible">ELIGIBLE</span>
-            </div>
-            <div class="overlay-perf-group">
-              <span class="overlay-perf-label">SCORE:</span>
-              <span id="stab-score-header" class="overlay-perf-val highlight-val">0.95</span>
-              <span id="stab-latency-val" class="overlay-perf-val">0.8ms</span>
-              <button id="close-stability-btn" class="overlay-close-btn" title="Toggle Compact Mode">─</button>
-            </div>
-          </div>
-
-          <div class="overlay-layers-grid stability-grid" id="stability-layers-body">
-            <!-- 1. FINGER LAYER (State, Stability, Confidence, Age) -->
-            <div class="overlay-layer-card" id="stab-finger-card">
-              <div class="overlay-layer-head">
-                <span class="layer-num">FL</span>
-                <span class="layer-name">FINGERS (3F)</span>
-                <span id="stab-finger-status" class="layer-status-pill stable">STABLE</span>
-              </div>
-              <div class="stability-finger-list">
-                <div class="sf-row" id="sf-row-thumb">
-                  <span class="sf-name">THUMB</span>
-                  <span id="sf-thumb-state" class="sf-badge state-badge">EXT</span>
-                  <span class="sf-meta">Stab: <strong id="sf-thumb-stab">0.95</strong></span>
-                  <span class="sf-meta">Conf: <strong id="sf-thumb-conf">0.96</strong></span>
-                  <span class="sf-meta">Age: <strong id="sf-thumb-age">12f</strong></span>
-                </div>
-                <div class="sf-row" id="sf-row-index">
-                  <span class="sf-name">INDEX</span>
-                  <span id="sf-index-state" class="sf-badge state-badge">EXT</span>
-                  <span class="sf-meta">Stab: <strong id="sf-index-stab">0.98</strong></span>
-                  <span class="sf-meta">Conf: <strong id="sf-index-conf">0.99</strong></span>
-                  <span class="sf-meta">Age: <strong id="sf-index-age">24f</strong></span>
-                </div>
-                <div class="sf-row" id="sf-row-middle">
-                  <span class="sf-name">MIDDLE</span>
-                  <span id="sf-middle-state" class="sf-badge state-badge">EXT</span>
-                  <span class="sf-meta">Stab: <strong id="sf-middle-stab">0.94</strong></span>
-                  <span class="sf-meta">Conf: <strong id="sf-middle-conf">0.95</strong></span>
-                  <span class="sf-meta">Age: <strong id="sf-middle-age">18f</strong></span>
-                </div>
-                <div class="sf-row" id="sf-row-ring">
-                  <span class="sf-name">RING</span>
-                  <span id="sf-ring-state" class="sf-badge state-badge">EXT</span>
-                  <span class="sf-meta">Stab: <strong id="sf-ring-stab">0.92</strong></span>
-                  <span class="sf-meta">Conf: <strong id="sf-ring-conf">0.93</strong></span>
-                  <span class="sf-meta">Age: <strong id="sf-ring-age">15f</strong></span>
-                </div>
-                <div class="sf-row" id="sf-row-little">
-                  <span class="sf-name">LITTLE</span>
-                  <span id="sf-little-state" class="sf-badge state-badge">EXT</span>
-                  <span class="sf-meta">Stab: <strong id="sf-little-stab">0.90</strong></span>
-                  <span class="sf-meta">Conf: <strong id="sf-little-conf">0.91</strong></span>
-                  <span class="sf-meta">Age: <strong id="sf-little-age">10f</strong></span>
-                </div>
-              </div>
-            </div>
-
-            <!-- 2. POSE LAYER (Pose, Observation Timer, Stability Score, Hysteresis) -->
-            <div class="overlay-layer-card" id="stab-pose-card">
-              <div class="overlay-layer-head">
-                <span class="layer-num">PL</span>
-                <span class="layer-name">POSE (5F)</span>
-                <span id="stab-pose-status" class="layer-status-pill confirmed">STABLE</span>
-              </div>
-              <div class="overlay-hero-val">
-                <span id="sp-pose-name" class="op-pose-title">NONE</span>
-                <span id="sp-pose-score" class="op-pose-score">0.00</span>
-              </div>
-              <div class="overlay-subline">
-                <span>Obs Timer: <strong id="sp-obs-timer">0ms</strong></span>
-                <span>Age: <strong id="sp-pose-age">0f</strong></span>
-              </div>
-              <div class="overlay-subline hysteresis-row">
-                <span>Enter: <strong id="sp-enter-th">0.88</strong></span>
-                <span>Exit: <strong id="sp-exit-th">0.62</strong></span>
-              </div>
-            </div>
-
-            <!-- 3. MOTION LAYER (Velocity, Direction, Dead-Zone Indicator, Displacement) -->
-            <div class="overlay-layer-card" id="stab-motion-card">
-              <div class="overlay-layer-head">
-                <span class="layer-num">ML</span>
-                <span class="layer-name">MOTION (8F)</span>
-                <span id="stab-deadzone-badge" class="layer-status-pill deadzone-in">DEAD ZONE</span>
-              </div>
-              <div class="overlay-metrics-quad">
-                <div class="om-stat"><span class="om-lbl">VEL</span><strong id="sm-vel">0.00</strong></div>
-                <div class="om-stat"><span class="om-lbl">DISP</span><strong id="sm-disp">0.00</strong></div>
-                <div class="om-stat"><span class="om-lbl">RADIUS</span><strong id="sm-radius">18px</strong></div>
-                <div class="om-stat"><span class="om-lbl">RAMP</span><strong id="sm-ramp">0.00</strong></div>
-              </div>
-              <div class="overlay-subline">
-                <span>Dir: <strong id="sm-dir">STATIONARY</strong></span>
-                <span>Status: <strong id="sm-status">DEAD ZONE</strong></span>
-              </div>
-            </div>
-
-            <!-- 4. STABILITY LAYER (Micro-adjustment, Transition, Stable, Locked, Windows) -->
-            <div class="overlay-layer-card" id="stab-lifecycle-card">
-              <div class="overlay-layer-head">
-                <span class="layer-num">SL</span>
-                <span class="layer-name">LIFECYCLE</span>
-                <span id="stab-lifecycle-badge" class="layer-status-pill stable">INTENTIONAL</span>
-              </div>
-              <div class="stability-pills-row">
-                <span id="pill-micro" class="stab-indicator-pill">MICRO</span>
-                <span id="pill-trans" class="stab-indicator-pill">TRANSITION</span>
-                <span id="pill-stable" class="stab-indicator-pill active-pill">STABLE</span>
-                <span id="pill-locked" class="stab-indicator-pill">LOCKED</span>
-              </div>
-              <div class="overlay-subline window-metrics">
-                <span>Windows: <strong id="sl-windows">F:3 P:5 M:8 G:12 2H:16</strong></span>
-              </div>
-              <div class="overlay-subline">
-                <span>Trans: <strong id="sl-trans-info">STABLE (0%)</strong></span>
-                <span>Hold: <strong id="sl-hold-info">0ms / 0ms</strong></span>
-              </div>
-            </div>
-
-            <!-- 5. INTENT LAYER (Candidate, Confirmed, Stability Score, Eligibility) -->
-            <div class="overlay-layer-card" id="stab-intent-card">
-              <div class="overlay-layer-head">
-                <span class="layer-num">IL</span>
-                <span class="layer-name">INTENT (12F)</span>
-                <span id="stab-eligibility-badge" class="layer-status-pill confirmed">ELIGIBLE</span>
-              </div>
-              <div class="overlay-hero-val">
-                <span id="si-confirmed-gesture" class="oi-gesture-title">NONE</span>
-                <span id="si-stability-score" class="oi-evidence-val">0.00</span>
-              </div>
-              <div class="overlay-subline">
-                <span>Cand: <strong id="si-candidate-gesture">NONE</strong></span>
-                <span>Thresh: <strong id="si-threshold">0.90</strong></span>
-              </div>
-              <div class="overlay-subline formula-row">
-                <span>Score: <strong id="si-formula-breakdown">0.35R + 0.25T + 0.20M + 0.20P</strong></span>
-              </div>
-            </div>
-          </div>
-
-          <!-- REJECTION EXPLAINABILITY STRIP: Explains WHY a gesture was rejected -->
-          <div class="overlay-explain-row stability-rejection-strip">
-            <span class="explain-label">STATUS / REJECTION:</span>
-            <span id="stability-explain-text" class="explain-text">Evaluating hand stability. Deliberate, stable human intent required for commands.</span>
-          </div>
-        </div>
-
-        <!-- DEVELOPER DEBUG OVERLAY: TEMPORAL INTENT ENGINE -->
-        <div id="temporal-intent-overlay" class="temporal-intent-overlay hidden">
-          <div class="overlay-header">
-            <div class="overlay-title-group">
-              <span class="overlay-live-dot"></span>
-              <span class="overlay-title">TEMPORAL INTENT ENGINE</span>
-              <span id="intent-fsm-pill" class="intent-state-pill state-idle">IDLE</span>
-              <span id="intent-lock-pill" class="intent-lock-pill unlocked">UNLOCKED</span>
-            </div>
-            <div class="overlay-perf-group">
-              <span id="overlay-perf-fps" class="overlay-perf-val">60 FPS</span>
-              <span id="overlay-perf-lat" class="overlay-perf-val">1.2ms</span>
-              <button id="close-overlay-btn" class="overlay-close-btn" title="Toggle Compact Mode">─</button>
-            </div>
-          </div>
-
-          <div class="overlay-layers-grid" id="overlay-layers-body">
-            <!-- 1. FINGER LAYER (1-3 Frames) -->
-            <div class="overlay-layer-card" id="overlay-finger-card">
-              <div class="overlay-layer-head">
-                <span class="layer-num">L0</span>
-                <span class="layer-name">FINGERS (1–3F)</span>
-                <span id="overlay-finger-status" class="layer-status-pill stable">STABLE</span>
-              </div>
-              <div class="overlay-finger-states">
-                <div class="of-digit"><span class="of-name">T</span><span id="of-thumb" class="of-val">--</span></div>
-                <div class="of-digit"><span class="of-name">I</span><span id="of-index" class="of-val">--</span></div>
-                <div class="of-digit"><span class="of-name">M</span><span id="of-middle" class="of-val">--</span></div>
-                <div class="of-digit"><span class="of-name">R</span><span id="of-ring" class="of-val">--</span></div>
-                <div class="of-digit"><span class="of-name">L</span><span id="of-little" class="of-val">--</span></div>
-              </div>
-              <div class="overlay-subline">
-                <span>Confidence: <strong id="of-conf">0.00</strong></span>
-                <span>Jitter: <strong id="of-jitter">0.001</strong></span>
-              </div>
-            </div>
-
-            <!-- 2. POSE LAYER (3-5 Frames Hysteresis) -->
-            <div class="overlay-layer-card" id="overlay-pose-card">
-              <div class="overlay-layer-head">
-                <span class="layer-num">L1</span>
-                <span class="layer-name">POSE (3–5F)</span>
-                <span id="overlay-pose-status" class="layer-status-pill confirmed">CONFIRMED</span>
-              </div>
-              <div class="overlay-hero-val">
-                <span id="op-pose-name" class="op-pose-title">NONE</span>
-                <span id="op-pose-conf" class="op-pose-score">0.00</span>
-              </div>
-              <div class="overlay-subline">
-                <span>Candidate: <strong id="op-candidate">NONE</strong></span>
-                <span>Frames: <strong id="op-frames">0/5</strong></span>
-              </div>
-            </div>
-
-            <!-- 3. MOTION LAYER (5-10 Frames) -->
-            <div class="overlay-layer-card" id="overlay-motion-card">
-              <div class="overlay-layer-head">
-                <span class="layer-num">L2</span>
-                <span class="layer-name">MOTION (5–10F)</span>
-                <span id="overlay-motion-status" class="layer-status-pill moving">STILL</span>
-              </div>
-              <div class="overlay-metrics-quad">
-                <div class="om-stat"><span class="om-lbl">SPD</span><strong id="om-speed">0.00</strong></div>
-                <div class="om-stat"><span class="om-lbl">DISP</span><strong id="om-disp">0.00</strong></div>
-                <div class="om-stat"><span class="om-lbl">LIN</span><strong id="om-lin">1.00</strong></div>
-                <div class="om-stat"><span class="om-lbl">CONS</span><strong id="om-cons">1.00</strong></div>
-              </div>
-              <div class="overlay-subline">
-                <span>Dir: <strong id="om-dir">STILL</strong></span>
-                <span>Dur: <strong id="om-dur">0ms</strong></span>
-              </div>
-            </div>
-
-            <!-- 4. INTENT LAYER (8-15 Frames & Priority) -->
-            <div class="overlay-layer-card" id="overlay-intent-card">
-              <div class="overlay-layer-head">
-                <span class="layer-num">L3-5</span>
-                <span class="layer-name">INTENT & LOCK</span>
-                <span id="overlay-priority-badge" class="layer-status-pill priority">TIER 5</span>
-              </div>
-              <div class="overlay-hero-val">
-                <span id="oi-gesture-name" class="oi-gesture-title">NONE</span>
-                <span id="oi-evidence-score" class="oi-evidence-val">0.00</span>
-              </div>
-              <div class="overlay-subline">
-                <span>Lock: <strong id="oi-lock-status">UNLOCKED</strong></span>
-                <span>Easing: <strong id="oi-easing-val">1.00</strong></span>
-              </div>
-            </div>
-          </div>
-
-          <!-- 5. REAL-TIME EXPLAINABILITY REASONING STRIP -->
-          <div class="overlay-explain-row">
-            <span class="explain-label">EVIDENCE:</span>
-            <span id="overlay-explain-text" class="explain-text">Collecting evidence. System requires temporal consensus before confirming action.</span>
-          </div>
+        <!-- Mode Indicator Badge on Feed -->
+        <div id="feed-perception-badge" class="feed-perception-badge hand-centric">
+          <span class="feed-perception-dot"></span>
+          <span id="feed-perception-text">HAND-CENTRIC [NORMAL]</span>
         </div>
 
         <div id="sensor-placeholder" class="sensor-placeholder">
@@ -714,6 +308,316 @@
 
     </section>
   </main>
+
+  <!-- NON-INTRUSIVE COLLAPSIBLE DEVELOPER HUD DOCK (DOES NOT OBSTRUCT CAMERA FEED) -->
+  <div id="diagnostic-hud-dock" class="diagnostic-hud-dock">
+    <!-- DEVELOPER DEBUG OVERLAY: CONTINUOUS 3D SPATIAL REPRESENTATION -->
+    <div id="spatial-representation-overlay" class="spatial-representation-overlay hidden">
+      <div class="overlay-header">
+        <div class="overlay-title-group">
+          <span class="overlay-live-dot spatial-dot"></span>
+          <span class="overlay-title">SPATIAL 3D REPRESENTATION</span>
+          <span id="spatial-lifecycle-pill" class="intent-state-pill spatial-stable">STABLE</span>
+          <span id="spatial-ambiguity-pill" class="spatial-ambiguity-pill amb-low">AMB: LOW</span>
+          <span id="spatial-facing-pill" class="dorsal-pill">PALM</span>
+          <span id="spatial-foreshorten-pill" class="foreshorten-pill hidden">FORESHORTENED</span>
+        </div>
+        <div class="overlay-perf-group">
+          <span class="overlay-perf-label">CONF:</span>
+          <span id="spatial-conf-header" class="overlay-perf-val highlight-val">0.96</span>
+          <button id="close-spatial-btn" class="overlay-close-btn" title="Toggle Compact Mode">─</button>
+        </div>
+      </div>
+
+      <!-- SPATIAL HUD BODY (Streamlined: Kinematics + Sectors) -->
+      <div class="spatial-hud-grid">
+        <!-- 1. CONTINUOUS VECTOR & MOTION COLUMN -->
+        <div class="spatial-hud-col">
+          <div class="spatial-subhead">CONTINUOUS KINEMATICS & VECTORS</div>
+          <div class="spatial-metric-row">
+            <span class="s-lbl">2D Screen Vector:</span>
+            <span id="spatial-vec2d-val" class="s-val font-mono">(0.00, 0.00)</span>
+          </div>
+          <div class="spatial-metric-row">
+            <span class="s-lbl">Continuous Heading:</span>
+            <span id="spatial-heading-val" class="s-val">0.0°</span>
+          </div>
+          <div class="spatial-metric-row">
+            <span class="s-lbl">3D Velocity:</span>
+            <span id="spatial-vel3d-val" class="s-val font-mono">(0.00, 0.00, 0.00)</span>
+          </div>
+          <div class="spatial-metric-row">
+            <span class="s-lbl">Speed (3D / XY / Z):</span>
+            <span id="spatial-speed-val" class="s-val">0.00 | 0.00 | 0.00</span>
+          </div>
+          <div class="spatial-metric-row">
+            <span class="s-lbl">Depth Kinematics:</span>
+            <span id="spatial-depth-val" class="s-val highlight-cyan">NEUTRAL</span>
+          </div>
+          <div class="spatial-metric-row">
+            <span class="s-lbl">Hand Basis Normal:</span>
+            <span id="spatial-normal-val" class="s-val font-mono">(0.00, 0.00, -1.00)</span>
+          </div>
+        </div>
+
+        <!-- 2. 8-SECTOR SOFT PROBABILITY & GREY ZONE COLUMN -->
+        <div class="spatial-hud-col">
+          <div class="spatial-subhead">8-SECTOR SOFT PROBABILITY (GREY ZONE)</div>
+          <div class="sector-prob-grid">
+            <div class="sector-bar-item" id="sec-bar-top-left">
+              <span class="sec-label">TL</span>
+              <div class="sec-bar-track"><div class="sec-bar-fill" style="width: 0%;"></div></div>
+              <span class="sec-val">0.00</span>
+            </div>
+            <div class="sector-bar-item" id="sec-bar-top">
+              <span class="sec-label">TOP</span>
+              <div class="sec-bar-track"><div class="sec-bar-fill" style="width: 0%;"></div></div>
+              <span class="sec-val">0.00</span>
+            </div>
+            <div class="sector-bar-item" id="sec-bar-top-right">
+              <span class="sec-label">TR</span>
+              <div class="sec-bar-track"><div class="sec-bar-fill" style="width: 0%;"></div></div>
+              <span class="sec-val">0.00</span>
+            </div>
+            <div class="sector-bar-item" id="sec-bar-left">
+              <span class="sec-label">LEFT</span>
+              <div class="sec-bar-track"><div class="sec-bar-fill" style="width: 0%;"></div></div>
+              <span class="sec-val">0.00</span>
+            </div>
+            <div class="sector-bar-item" id="sec-bar-center">
+              <span class="sec-label">CTR</span>
+              <div class="sec-bar-track"><div class="sec-bar-fill" style="width: 100%;"></div></div>
+              <span class="sec-val">1.00</span>
+            </div>
+            <div class="sector-bar-item" id="sec-bar-right">
+              <span class="sec-label">RIGHT</span>
+              <div class="sec-bar-track"><div class="sec-bar-fill" style="width: 0%;"></div></div>
+              <span class="sec-val">0.00</span>
+            </div>
+            <div class="sector-bar-item" id="sec-bar-bottom-left">
+              <span class="sec-label">BL</span>
+              <div class="sec-bar-track"><div class="sec-bar-fill" style="width: 0%;"></div></div>
+              <span class="sec-val">0.00</span>
+            </div>
+            <div class="sector-bar-item" id="sec-bar-bottom">
+              <span class="sec-label">BTM</span>
+              <div class="sec-bar-track"><div class="sec-bar-fill" style="width: 0%;"></div></div>
+              <span class="sec-val">0.00</span>
+            </div>
+            <div class="sector-bar-item" id="sec-bar-bottom-right">
+              <span class="sec-label">BR</span>
+              <div class="sec-bar-track"><div class="sec-bar-fill" style="width: 0%;"></div></div>
+              <span class="sec-val">0.00</span>
+            </div>
+          </div>
+          <!-- Primary / Secondary / Ambiguity summary -->
+          <div class="spatial-interpretation-strip">
+            <div class="interp-box">
+              <span class="interp-lbl">INTERPRETATION:</span>
+              <strong id="spatial-interp-val" class="interp-tag tag-primary">CENTER</strong>
+            </div>
+            <div class="interp-box">
+              <span class="interp-lbl">SECONDARY:</span>
+              <span id="spatial-sec-val" class="interp-secondary">NONE</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- UNCERTAINTY EXPLAINABILITY STRIP -->
+      <div class="overlay-explain-row spatial-uncertainty-strip">
+        <span class="explain-label">SPATIAL UNCERTAINTY REASONING:</span>
+        <span id="spatial-explain-text" class="explain-text">Continuous 3D articulated representation active. Observations modeled probabilistically without forced categorization.</span>
+      </div>
+    </div>
+
+    <!-- DEVELOPER DEBUG OVERLAY: STABILITY ENGINE -->
+    <div id="stability-engine-overlay" class="stability-engine-overlay hidden">
+      <div class="overlay-header">
+        <div class="overlay-title-group">
+          <span class="overlay-live-dot stability-dot"></span>
+          <span class="overlay-title">STABILITY ENGINE</span>
+          <span id="stab-category-pill" class="intent-state-pill stab-intentional">INTENTIONAL</span>
+          <span id="stab-lock-pill" class="intent-lock-pill unlocked">UNLOCKED</span>
+          <span id="stab-eligible-pill" class="intent-state-pill stab-eligible">ELIGIBLE</span>
+        </div>
+        <div class="overlay-perf-group">
+          <span class="overlay-perf-label">SCORE:</span>
+          <span id="stab-score-header" class="overlay-perf-val highlight-val">0.95</span>
+          <span id="stab-latency-val" class="overlay-perf-val">0.8ms</span>
+          <button id="close-stability-btn" class="overlay-close-btn" title="Toggle Compact Mode">─</button>
+        </div>
+      </div>
+
+      <div class="overlay-layers-grid stability-grid" id="stability-layers-body">
+        <!-- 1. POSE LAYER (Pose, Observation Timer, Stability Score, Hysteresis) -->
+        <div class="overlay-layer-card" id="stab-pose-card">
+          <div class="overlay-layer-head">
+            <span class="layer-num">PL</span>
+            <span class="layer-name">POSE (5F)</span>
+            <span id="stab-pose-status" class="layer-status-pill confirmed">STABLE</span>
+          </div>
+          <div class="overlay-hero-val">
+            <span id="sp-pose-name" class="op-pose-title">NONE</span>
+            <span id="sp-pose-score" class="op-pose-score">0.00</span>
+          </div>
+          <div class="overlay-subline">
+            <span>Obs Timer: <strong id="sp-obs-timer">0ms</strong></span>
+            <span>Age: <strong id="sp-pose-age">0f</strong></span>
+          </div>
+          <div class="overlay-subline hysteresis-row">
+            <span>Enter: <strong id="sp-enter-th">0.88</strong></span>
+            <span>Exit: <strong id="sp-exit-th">0.62</strong></span>
+          </div>
+        </div>
+
+        <!-- 2. MOTION LAYER (Velocity, Direction, Dead-Zone Indicator, Displacement) -->
+        <div class="overlay-layer-card" id="stab-motion-card">
+          <div class="overlay-layer-head">
+            <span class="layer-num">ML</span>
+            <span class="layer-name">MOTION (8F)</span>
+            <span id="stab-deadzone-badge" class="layer-status-pill deadzone-in">DEAD ZONE</span>
+          </div>
+          <div class="overlay-metrics-quad">
+            <div class="om-stat"><span class="om-lbl">VEL</span><strong id="sm-vel">0.00</strong></div>
+            <div class="om-stat"><span class="om-lbl">DISP</span><strong id="sm-disp">0.00</strong></div>
+            <div class="om-stat"><span class="om-lbl">RADIUS</span><strong id="sm-radius">18px</strong></div>
+            <div class="om-stat"><span class="om-lbl">RAMP</span><strong id="sm-ramp">0.00</strong></div>
+          </div>
+          <div class="overlay-subline">
+            <span>Dir: <strong id="sm-dir">STATIONARY</strong></span>
+            <span>Status: <strong id="sm-status">DEAD ZONE</strong></span>
+          </div>
+        </div>
+
+        <!-- 3. STABILITY LIFECYCLE LAYER -->
+        <div class="overlay-layer-card" id="stab-lifecycle-card">
+          <div class="overlay-layer-head">
+            <span class="layer-num">SL</span>
+            <span class="layer-name">LIFECYCLE</span>
+            <span id="stab-lifecycle-badge" class="layer-status-pill stable">INTENTIONAL</span>
+          </div>
+          <div class="stability-pills-row">
+            <span id="pill-micro" class="stab-indicator-pill">MICRO</span>
+            <span id="pill-trans" class="stab-indicator-pill">TRANSITION</span>
+            <span id="pill-stable" class="stab-indicator-pill active-pill">STABLE</span>
+            <span id="pill-locked" class="stab-indicator-pill">LOCKED</span>
+          </div>
+          <div class="overlay-subline window-metrics">
+            <span>Windows: <strong id="sl-windows">F:3 P:5 M:8 G:12 2H:16</strong></span>
+          </div>
+          <div class="overlay-subline">
+            <span>Trans: <strong id="sl-trans-info">STABLE (0%)</strong></span>
+            <span>Hold: <strong id="sl-hold-info">0ms / 0ms</strong></span>
+          </div>
+        </div>
+
+        <!-- 4. INTENT LAYER -->
+        <div class="overlay-layer-card" id="stab-intent-card">
+          <div class="overlay-layer-head">
+            <span class="layer-num">IL</span>
+            <span class="layer-name">INTENT (12F)</span>
+            <span id="stab-eligibility-badge" class="layer-status-pill confirmed">ELIGIBLE</span>
+          </div>
+          <div class="overlay-hero-val">
+            <span id="si-confirmed-gesture" class="oi-gesture-title">NONE</span>
+            <span id="si-stability-score" class="oi-evidence-val">0.00</span>
+          </div>
+          <div class="overlay-subline">
+            <span>Cand: <strong id="si-candidate-gesture">NONE</strong></span>
+            <span>Thresh: <strong id="si-threshold">0.90</strong></span>
+          </div>
+          <div class="overlay-subline formula-row">
+            <span>Score: <strong id="si-formula-breakdown">0.35R + 0.25T + 0.20M + 0.20P</strong></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- REJECTION EXPLAINABILITY STRIP -->
+      <div class="overlay-explain-row stability-rejection-strip">
+        <span class="explain-label">STATUS / REJECTION:</span>
+        <span id="stability-explain-text" class="explain-text">Evaluating hand stability. Deliberate, stable human intent required for commands.</span>
+      </div>
+    </div>
+
+    <!-- DEVELOPER DEBUG OVERLAY: TEMPORAL INTENT ENGINE -->
+    <div id="temporal-intent-overlay" class="temporal-intent-overlay hidden">
+      <div class="overlay-header">
+        <div class="overlay-title-group">
+          <span class="overlay-live-dot"></span>
+          <span class="overlay-title">TEMPORAL INTENT ENGINE</span>
+          <span id="intent-fsm-pill" class="intent-state-pill state-idle">IDLE</span>
+          <span id="intent-lock-pill" class="intent-lock-pill unlocked">UNLOCKED</span>
+        </div>
+        <div class="overlay-perf-group">
+          <span id="overlay-perf-fps" class="overlay-perf-val">60 FPS</span>
+          <span id="overlay-perf-lat" class="overlay-perf-val">1.2ms</span>
+          <button id="close-overlay-btn" class="overlay-close-btn" title="Toggle Compact Mode">─</button>
+        </div>
+      </div>
+
+      <div class="overlay-layers-grid" id="overlay-layers-body">
+        <!-- 1. POSE LAYER (3-5 Frames Hysteresis) -->
+        <div class="overlay-layer-card" id="overlay-pose-card">
+          <div class="overlay-layer-head">
+            <span class="layer-num">L1</span>
+            <span class="layer-name">POSE (3–5F)</span>
+            <span id="overlay-pose-status" class="layer-status-pill confirmed">CONFIRMED</span>
+          </div>
+          <div class="overlay-hero-val">
+            <span id="op-pose-name" class="op-pose-title">NONE</span>
+            <span id="op-pose-conf" class="op-pose-score">0.00</span>
+          </div>
+          <div class="overlay-subline">
+            <span>Candidate: <strong id="op-candidate">NONE</strong></span>
+            <span>Frames: <strong id="op-frames">0/5</strong></span>
+          </div>
+        </div>
+
+        <!-- 2. MOTION LAYER (5-10 Frames) -->
+        <div class="overlay-layer-card" id="overlay-motion-card">
+          <div class="overlay-layer-head">
+            <span class="layer-num">L2</span>
+            <span class="layer-name">MOTION (5–10F)</span>
+            <span id="overlay-motion-status" class="layer-status-pill moving">STILL</span>
+          </div>
+          <div class="overlay-metrics-quad">
+            <div class="om-stat"><span class="om-lbl">SPD</span><strong id="om-speed">0.00</strong></div>
+            <div class="om-stat"><span class="om-lbl">DISP</span><strong id="om-disp">0.00</strong></div>
+            <div class="om-stat"><span class="om-lbl">LIN</span><strong id="om-lin">1.00</strong></div>
+            <div class="om-stat"><span class="om-lbl">CONS</span><strong id="om-cons">1.00</strong></div>
+          </div>
+          <div class="overlay-subline">
+            <span>Dir: <strong id="om-dir">STILL</strong></span>
+            <span>Dur: <strong id="om-dur">0ms</strong></span>
+          </div>
+        </div>
+
+        <!-- 3. INTENT LAYER (8-15 Frames & Priority) -->
+        <div class="overlay-layer-card" id="overlay-intent-card">
+          <div class="overlay-layer-head">
+            <span class="layer-num">L3-5</span>
+            <span class="layer-name">INTENT & LOCK</span>
+            <span id="overlay-priority-badge" class="layer-status-pill priority">TIER 5</span>
+          </div>
+          <div class="overlay-hero-val">
+            <span id="oi-gesture-name" class="oi-gesture-title">NONE</span>
+            <span id="oi-evidence-score" class="oi-evidence-val">0.00</span>
+          </div>
+          <div class="overlay-subline">
+            <span>Lock: <strong id="oi-lock-status">UNLOCKED</strong></span>
+            <span>Easing: <strong id="oi-easing-val">1.00</strong></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- REAL-TIME EXPLAINABILITY REASONING STRIP -->
+      <div class="overlay-explain-row">
+        <span class="explain-label">EVIDENCE:</span>
+        <span id="overlay-explain-text" class="explain-text">Collecting evidence. System requires temporal consensus before confirming action.</span>
+      </div>
+    </div>
+  </div>
 
   <!-- Component Scripts (Focused entirely on Finger Interpretation) -->
   <script src="js/finger_lab.js"></script>

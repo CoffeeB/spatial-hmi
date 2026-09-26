@@ -1247,6 +1247,8 @@ body.finger-lab-mode {
   pointer-events: none;
   z-index: 2;
 }
+
+.sensor-placeholder {
   position: absolute;
   display: flex;
   flex-direction: column;
@@ -2535,7 +2537,7 @@ body.finger-lab-mode {
 /* Layers Grid */
 .overlay-layers-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 8px;
 }
 
@@ -2859,7 +2861,7 @@ body.finger-lab-mode {
 
 .stability-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 8px;
 }
 
@@ -3069,8 +3071,8 @@ body.finger-lab-mode {
 
 .spatial-hud-grid {
   display: grid;
-  grid-template-columns: 1fr 1.15fr 1fr;
-  gap: 10px;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
 }
 
 .spatial-hud-col {
@@ -3274,6 +3276,106 @@ body.finger-lab-mode {
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   padding-top: 6px;
 }
+
+/* =========================================================================
+   DIAGNOSTIC HUD DOCK & PERCEPTION MODE BADGE (UNOBSTRUCTED VIDEO FEED)
+   ========================================================================= */
+
+.diagnostic-hud-dock {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 0 20px 14px 20px;
+}
+
+.diagnostic-hud-dock .spatial-representation-overlay,
+.diagnostic-hud-dock .stability-engine-overlay,
+.diagnostic-hud-dock .temporal-intent-overlay {
+  position: relative !important;
+  top: auto !important;
+  left: auto !important;
+  right: auto !important;
+  width: 100%;
+  max-width: 1350px;
+  max-height: 48vh;
+  overflow-y: auto;
+  pointer-events: auto;
+  box-shadow: 0 -8px 36px rgba(0, 0, 0, 0.92);
+}
+
+/* Header Perception Mode Status Chip */
+.perception-mode-chip {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  transition: all 0.25s ease;
+}
+
+.perception-mode-chip.hand-centric {
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.4);
+}
+
+.perception-mode-chip.finger-centric {
+  color: #34d399;
+  border-color: rgba(16, 185, 129, 0.7);
+  background: rgba(16, 185, 129, 0.16);
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.35);
+}
+
+/* On-Feed Perception Mode Corner Badge */
+.feed-perception-badge {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 13px;
+  background: rgba(10, 15, 29, 0.82);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(0, 240, 255, 0.35);
+  border-radius: 20px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #38bdf8;
+  pointer-events: none;
+  transition: all 0.25s ease;
+}
+
+.feed-perception-badge .feed-perception-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #38bdf8;
+  box-shadow: 0 0 8px #38bdf8;
+}
+
+.feed-perception-badge.finger-centric {
+  background: rgba(6, 24, 18, 0.90);
+  border-color: rgba(16, 185, 129, 0.65);
+  color: #34d399;
+  box-shadow: 0 0 16px rgba(16, 185, 129, 0.35);
+}
+
+.feed-perception-badge.finger-centric .feed-perception-dot {
+  background: #10b981;
+  box-shadow: 0 0 10px #10b981;
+  animation: pulse-glow 1s infinite alternate;
+}
+
 
 
 

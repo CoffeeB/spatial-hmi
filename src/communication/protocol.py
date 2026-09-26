@@ -82,6 +82,11 @@ class HandTelemetry(BaseModel):
     # Continuous 3D Spatial Representation & Perception Telemetry
     spatial_telemetry: Dict[str, Any] = {}
 
+    # Finger-Centric Perception Telemetry & Dynamic Representation Switching
+    active_representation: str = "HAND_CENTRIC"
+    viewpoint_mode: str = "NORMAL"
+    finger_centric_telemetry: Dict[str, Any] = {}
+
 
 class HMIPacket(BaseModel):
     """

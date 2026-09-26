@@ -4,7 +4,7 @@ MediaPipe Hands perception module with landmark extraction and kinematic state e
 
 import time
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 import cv2
 import mediapipe as mp
 import numpy as np
@@ -12,14 +12,19 @@ import numpy as np
 from src.gestures.complete_gesture import CompleteGestureId, CompleteGestureRecognizer
 from src.gestures.hand_pose import HandPoseClassifier, HandPoseId
 from src.intent.temporal_intent_engine import TemporalIntentEngine
-from src.landmarks.finger_state import FingerStateClassifier, HandFingerStates
+from src.landmarks.finger_state import FingerStateClassifier, HandFingerStates, FingerStateEnum
 from src.landmarks.hand_state import HandLandmark, HandState
 from src.landmarks.kinematic_features import KinematicFeatureExtractor
 from src.landmarks.normalization import LandmarkNormalizer
 from src.motion import MotionPrimitiveTracker
 from src.spatial import SpatialPerceptionEngine
 from src.stability.stability_engine import StabilityEngine
-from src.finger_centric import FingerCentricPerceptionEngine
+from src.finger_centric import (
+    FingerCentricPerceptionEngine,
+    FingerCentricState,
+    ViewpointMode,
+    ActiveRepresentation,
+)
 from src.utils.logging_config import setup_logger
 
 logger = setup_logger("hand_detector")
@@ -42,8 +47,8 @@ class HandDetector:
     def __init__(
         self,
         max_num_hands: int = 2,
-        min_detection_confidence: float = 0.50,
-        min_tracking_confidence: float = 0.45,
+        min_detection_confidence: float = 0.40,
+        min_tracking_confidence: float = 0.38,
         model_complexity: int = 1,
     ):
         self.max_num_hands = max_num_hands
@@ -187,221 +192,27 @@ class HandDetector:
 
             # Extract 21 3D landmarks as numpy array
             raw_pts = np.zeros((21, 3), dtype=np.float32)
-            landmark_objs: List[HandLandmark] = []
+            vis_list: List[float] = []
 
             for i, lm in enumerate(landmarks_proto.landmark):
                 raw_pts[i] = [lm.x, lm.y, lm.z]
-                # In MediaPipe Hands protobuf, lm.visibility is not populated by the Hand model;
-                # reading lm.visibility without HasField gives 0.0, corrupting confidence.
                 vis_val = float(lm.visibility) if lm.HasField("visibility") else 1.0
-                landmark_objs.append(
-                    HandLandmark(
-                        index=i,
-                        x=float(lm.x),
-                        y=float(lm.y),
-                        z=float(lm.z),
-                        visibility=vis_val,
-                    )
-                )
+                vis_list.append(vis_val)
 
-            # Scale and translation normalization
-            normalized_pts, palm_center_arr, d_ref = self.normalizer.normalize(raw_pts)
-            palm_center = (float(palm_center_arr[0]), float(palm_center_arr[1]), float(palm_center_arr[2]))
-
-            # Kinematic features
-            finger_ratios = self.kinematics.compute_finger_extension_ratios(raw_pts)
-            flexion_angles = self.kinematics.compute_joint_flexion_angles(raw_pts)
-            pinch_dist, pinch_conf = self.kinematics.compute_pinch_metric(raw_pts, d_ref)
-            orientation = self.kinematics.compute_hand_orientation(raw_pts)
-            palm_velocity = self.kinematics.compute_palm_velocity(hand_id, palm_center_arr, now)
-
-            # Per-landmark visibility scores
-            vis_list = [float(lm.visibility) for lm in landmark_objs]
-
-            # Level 0 Finger States Classification ("What is every individual finger doing?")
-            finger_states = self.finger_classifier.classify_hand(
-                raw_landmarks=raw_pts,
+            state = self._process_single_hand(
+                hand_id=hand_id,
                 handedness=handedness,
-                detection_confidence=detection_conf,
+                raw_pts=raw_pts,
+                detection_conf=detection_conf,
+                now=now,
+                annotated_frame=annotated_frame,
+                draw_landmarks=True,
+                landmarks_proto=landmarks_proto,
                 visibilities=vis_list,
-                timestamp=now,
             )
-
-            # Level 1 Static Hand Pose Derivation (Finger States -> Finger Configuration -> Hand Pose)
-            derived_pose = self.pose_classifier.classify_pose(
-                finger_states=finger_states,
-                raw_landmarks=raw_pts,
-                d_ref=d_ref,
-                orientation_angles=orientation,
-            )
-
-            # Level 2 Motion Primitives ("How is the hand and every individual finger moving over time?")
-            # Hand tracking is completely independent per stable hand_id with dorsal inclusion
-            motion_state = self.motion_tracker.update(
-                hand_id=hand_id,
-                handedness=handedness,
-                palm_center=palm_center,
-                hand_scale_ref=d_ref,
-                timestamp=now,
-                raw_landmarks=raw_pts,
-                palm_facing=finger_states.palm_facing,
-                orientation_angles=orientation,
-                finger_ratios=finger_ratios,
-            )
-            active_hand_ids.add(hand_id)
-
-            # Level 3 Complete Gestures ("Compose Pose + Motion into observable event sequences")
-            complete_gesture = self.complete_gesture_recognizer.update(
-                hand_id=hand_id,
-                handedness=handedness,
-                derived_pose=derived_pose,
-                motion_state=motion_state,
-                finger_states=finger_states,
-                raw_landmarks=raw_pts,
-                d_ref=d_ref,
-                timestamp=now,
-            )
-
-            # Level 4 & 5 Temporal Intent Engine (Observation Windows, Stability, Intent Telemetry)
-            # Prioritize active dynamic complete gesture; fall back to static derived hand pose
-            if (
-                complete_gesture is not None
-                and hasattr(complete_gesture, "gesture_id")
-                and complete_gesture.gesture_id != CompleteGestureId.NONE
-                and getattr(complete_gesture, "confidence", 0.0) > 0.0
-            ):
-                candidate_gname = complete_gesture.gesture_id.value
-                candidate_gconf = complete_gesture.confidence
-            elif (
-                derived_pose is not None
-                and hasattr(derived_pose, "pose_id")
-                and derived_pose.pose_id != HandPoseId.UNKNOWN
-                and getattr(derived_pose, "confidence", 0.0) > 0.0
-            ):
-                candidate_gname = derived_pose.canonical_name
-                candidate_gconf = derived_pose.confidence
-            else:
-                candidate_gname = "NONE"
-                candidate_gconf = 0.0
-
-            # ── Level 3.5: STABILITY ENGINE ──────────────────────────────────────────
-            # Evaluates finger persistence, pose hysteresis, dead-zone, and micro-adjustments
-            stab_ctx = self.stability_engine.process_hand_stability(
-                hand_id=hand_id,
-                handedness=handedness,
-                raw_landmarks=raw_pts,
-                instantaneous_finger_states=finger_states,
-                instantaneous_pose=derived_pose,
-                instantaneous_motion=motion_state,
-                candidate_gesture=candidate_gname,
-                candidate_confidence=candidate_gconf,
-                palm_center=palm_center,
-                d_ref=d_ref,
-                detection_confidence=detection_conf,
-                is_active_interaction=self._active_interactions.get(hand_id, False),
-                timestamp=now,
-            )
-
-            (
-                stab_finger_states,
-                conf_derived_pose,
-                conf_motion_prim,
-                intent_ctx,
-                temporal_telem,
-            ) = self.temporal_intent_engine.process_hand_temporal(
-                hand_id=hand_id,
-                handedness=handedness,
-                raw_landmarks=raw_pts,
-                instantaneous_finger_states=stab_ctx.stabilized_finger_states,
-                instantaneous_pose=stab_ctx.stabilized_derived_pose,
-                palm_center=stab_ctx.filtered_palm_pos,
-                d_ref=d_ref,
-                detection_confidence=detection_conf,
-                candidate_gesture_name=candidate_gname,
-                candidate_confidence=candidate_gconf,
-                timestamp=now,
-            )
-
-            # ── SPATIAL REPRESENTATION & PERCEPTION OBJECT ────────────────────────────
-            # Computes continuous 3D articulated state, multi-space vectors, and uncertainty
-            perception_obj = self.spatial_engine.process_hand(
-                hand_id=hand_id,
-                handedness=handedness,
-                landmarks=raw_pts,
-                palm_center=stab_ctx.filtered_palm_pos,
-                scale_ref=d_ref,
-                timestamp=now,
-                landmark_visibilities=vis_list,
-                is_transitioning=stab_ctx.is_transitioning,
-            )
-            perception_obj.stability_state = "TRANSITION" if stab_ctx.is_transitioning else "STABLE"
-            perception_obj.stability_score = stab_ctx.stability_score
-            perception_obj.derived_pose = (
-                conf_derived_pose.canonical_name
-                if (conf_derived_pose and conf_derived_pose.pose_id != HandPoseId.UNKNOWN)
-                else (derived_pose.canonical_name if derived_pose else None)
-            )
-            perception_obj.discrete_gesture = (
-                complete_gesture.gesture_id.value
-                if (complete_gesture and complete_gesture.gesture_id != CompleteGestureId.NONE)
-                else None
-            )
-
-            # ── FINGER-CENTRIC PERCEPTION (parallel evidence stream) ────────────────
-            finger_centric_state = self.finger_centric_engine.process_hand(
-                hand_id=hand_id,
-                handedness=handedness,
-                raw_landmarks=raw_pts,
-                d_ref=d_ref,
-                palm_facing=finger_states.palm_facing,
-                timestamp=now,
-                visibilities=vis_list,
-                ext_ratios=finger_ratios,
-                motion_confidence=float(getattr(motion_state, "confidence", 0.80) or 0.80),
-                temporal_confidence=float(stab_ctx.stability_score or 0.80),
-            )
-
-            # Build immutable HandState
-            state = HandState(
-                hand_id=hand_id,
-                handedness=handedness,
-                landmarks=landmark_objs,
-                raw_landmarks_array=raw_pts,
-                normalized_landmarks_array=normalized_pts,
-                palm_center=stab_ctx.filtered_palm_pos,
-                palm_velocity=stab_ctx.filtered_palm_velocity,
-                hand_scale_ref=d_ref,
-                orientation_angles=orientation,
-                palm_facing=finger_states.palm_facing,
-                finger_extension_ratios=finger_ratios,
-                finger_flexion_angles=flexion_angles,
-                pinch_distance=pinch_dist,
-                pinch_confidence=pinch_conf,
-                finger_states=stab_finger_states or finger_states,
-                derived_pose=conf_derived_pose if (conf_derived_pose and conf_derived_pose.pose_id != HandPoseId.UNKNOWN) else derived_pose,
-                motion_state=motion_state,
-                complete_gesture=complete_gesture,
-                temporal_telemetry=temporal_telem.as_dict() if temporal_telem else {},
-                stability_context=stab_ctx,
-                stability_telemetry=stab_ctx.telemetry,
-                perception=perception_obj,
-                spatial_telemetry=perception_obj.to_dict(),
-                finger_centric=finger_centric_state,
-                finger_centric_telemetry=finger_centric_state.to_dict(),
-                intent_context=intent_ctx,
-                detection_confidence=detection_conf,
-                timestamp=now,
-            )
-            hand_states.append(state)
-
-            # Draw landmarks onto annotated debug frame
-            self.mp_drawing.draw_landmarks(
-                annotated_frame,
-                landmarks_proto,
-                self.mp_hands.HAND_CONNECTIONS,
-                self.mp_drawing_styles.get_default_hand_landmarks_style(),
-                self.mp_drawing_styles.get_default_hand_connections_style(),
-            )
+            if state is not None:
+                hand_states.append(state)
+                active_hand_ids.add(hand_id)
 
         # Prune motion buffers, complete gestures, and kinematics for hands no longer in frame
         self.spatial_engine.prune_missing_hands(list(active_hand_ids))
@@ -491,64 +302,134 @@ class HandDetector:
         now: float,
         annotated_frame: np.ndarray,
         draw_landmarks: bool = True,
+        landmarks_proto: Optional[Any] = None,
+        visibilities: Optional[List[float]] = None,
     ) -> Optional[HandState]:
         """
         Runs the full perception pipeline for a single hand given its raw landmark array.
-        Extracted from process_frame to allow ghost-frame replay without code duplication.
+        Dynamically shifts between HAND-CENTRIC and FINGER-CENTRIC evidence representations
+        based on camera viewpoint quality and foreshortening severity.
         """
-        from src.gestures.hand_pose import HandPoseId
-        from src.gestures.complete_gesture import CompleteGestureId
-
         # Parse landmark objects from raw array
+        vis_list = visibilities if visibilities is not None else [1.0] * 21
         landmark_objs: List[HandLandmark] = [
-            HandLandmark(index=i, x=float(raw_pts[i, 0]), y=float(raw_pts[i, 1]),
-                         z=float(raw_pts[i, 2]), visibility=1.0)
+            HandLandmark(
+                index=i,
+                x=float(raw_pts[i, 0]),
+                y=float(raw_pts[i, 1]),
+                z=float(raw_pts[i, 2]),
+                visibility=float(vis_list[i]),
+            )
             for i in range(21)
         ]
-        vis_list = [1.0] * 21
 
-        # Scale and translation normalization
+        # 1. Scale and translation normalization
         normalized_pts, palm_center_arr, d_ref = self.normalizer.normalize(raw_pts)
         palm_center = (float(palm_center_arr[0]), float(palm_center_arr[1]), float(palm_center_arr[2]))
 
-        # Kinematic features
-        finger_ratios = self.kinematics.compute_finger_extension_ratios(raw_pts)
+        # 2. Fast geometric palm-facing estimation
+        p0, p5, p9, p17 = raw_pts[0], raw_pts[5], raw_pts[9], raw_pts[17]
+        n_raw = np.cross(p5 - p17, p9 - p0) if handedness == "Left" else np.cross(p17 - p5, p9 - p0)
+        n_norm = float(np.linalg.norm(n_raw))
+        n_z = float(n_raw[2] / n_norm) if n_norm > 1e-5 else -1.0
+        init_palm_facing = "PALM" if n_z < -0.15 else ("DORSAL" if n_z > 0.15 else "SIDE")
+
+        # 3. ── FINGER-CENTRIC PERCEPTION (PRIMARY EVIDENCE EVALUATOR) ─────────────────
+        # Runs FIRST to establish viewpoint quality, chain geometry, and evidence representation
+        finger_centric_state = self.finger_centric_engine.process_hand(
+            hand_id=hand_id,
+            handedness=handedness,
+            raw_landmarks=raw_pts,
+            d_ref=d_ref,
+            palm_facing=init_palm_facing,
+            timestamp=now,
+            visibilities=vis_list,
+            ext_ratios=None,
+            motion_confidence=0.85,
+            temporal_confidence=float(detection_conf),
+        )
+
+        active_rep = finger_centric_state.fusion.active_representation
+        vp_mode = finger_centric_state.viewpoint.mode
+        chain_states = finger_centric_state.chain_states
+        chain_ratios = self.finger_centric_engine.compute_chain_extension_ratios(chain_states)
+
+        # 4. Kinematic features & Viewpoint-Adaptive Extension Ratios
+        raw_kinematic_ratios = self.kinematics.compute_finger_extension_ratios(raw_pts)
+        w_p = finger_centric_state.fusion.weights.palm_weight
+        w_f = finger_centric_state.fusion.weights.finger_weight
+        total_w = max(w_p + w_f, 1e-4)
+
+        is_cam_facing = (
+            vp_mode in (ViewpointMode.CAMERA_FACING, ViewpointMode.FORESHORTENED)
+            or active_rep == ActiveRepresentation.FINGER_CENTRIC
+        )
+
+        if is_cam_facing:
+            # Under camera-facing viewpoint, 3D articulated chain geometry replaces collapsing 2D ratios
+            fused_finger_ratios = {
+                k: chain_ratios.get(k, raw_kinematic_ratios.get(k, 1.0))
+                for k in raw_kinematic_ratios
+            }
+        else:
+            fused_finger_ratios = {
+                k: (w_p * raw_kinematic_ratios.get(k, 1.0) + w_f * chain_ratios.get(k, 1.0)) / total_w
+                for k in raw_kinematic_ratios
+            }
+
         flexion_angles = self.kinematics.compute_joint_flexion_angles(raw_pts)
         pinch_dist, pinch_conf = self.kinematics.compute_pinch_metric(raw_pts, d_ref)
         orientation = self.kinematics.compute_hand_orientation(raw_pts)
         palm_velocity = self.kinematics.compute_palm_velocity(hand_id, palm_center_arr, now)
 
-        # Level 0 Finger States
+        # 5. Level 0 Finger States (Informed by Finger-Centric Articulated Chains)
         finger_states = self.finger_classifier.classify_hand(
             raw_landmarks=raw_pts,
             handedness=handedness,
             detection_confidence=detection_conf,
             visibilities=vis_list,
             timestamp=now,
+            chain_states=chain_states,
+            viewpoint_mode=vp_mode.value,
+            active_representation=active_rep.value,
+            external_ratios=fused_finger_ratios,
         )
 
-        # Level 1 Static Hand Pose
+        # 6. Level 1 Static Hand Pose (Informed by Finger Configuration & Viewpoint)
         derived_pose = self.pose_classifier.classify_pose(
             finger_states=finger_states,
             raw_landmarks=raw_pts,
             d_ref=d_ref,
             orientation_angles=orientation,
+            active_representation=active_rep.value,
+            viewpoint_mode=vp_mode.value,
         )
 
-        # Level 2 Motion Primitives
+        # 7. Level 2 Motion Primitives
+        # When active representation is FINGER_CENTRIC, motion is guided by dominant focal fingertip!
+        tracking_pos = palm_center
+        if is_cam_facing and "index" in finger_centric_state.tip_states:
+            idx_tip_state = finger_centric_state.tip_states["index"]
+            if finger_states.index.state in (FingerStateEnum.EXTENDED, FingerStateEnum.TOUCHING):
+                tracking_pos = (
+                    float(idx_tip_state.position_3d[0]),
+                    float(idx_tip_state.position_3d[1]),
+                    float(idx_tip_state.position_3d[2]),
+                )
+
         motion_state = self.motion_tracker.update(
             hand_id=hand_id,
             handedness=handedness,
-            palm_center=palm_center,
+            palm_center=tracking_pos,
             hand_scale_ref=d_ref,
             timestamp=now,
             raw_landmarks=raw_pts,
             palm_facing=finger_states.palm_facing,
             orientation_angles=orientation,
-            finger_ratios=finger_ratios,
+            finger_ratios=fused_finger_ratios,
         )
 
-        # Level 3 Complete Gestures
+        # 8. Level 3 Complete Gestures
         complete_gesture = self.complete_gesture_recognizer.update(
             hand_id=hand_id,
             handedness=handedness,
@@ -581,7 +462,7 @@ class HandDetector:
             candidate_gname = "NONE"
             candidate_gconf = 0.0
 
-        # Stability Engine
+        # 9. Stability Engine & Temporal Intent Engine
         stab_ctx = self.stability_engine.process_hand_stability(
             hand_id=hand_id,
             handedness=handedness,
@@ -591,7 +472,7 @@ class HandDetector:
             instantaneous_motion=motion_state,
             candidate_gesture=candidate_gname,
             candidate_confidence=candidate_gconf,
-            palm_center=palm_center,
+            palm_center=tracking_pos,
             d_ref=d_ref,
             detection_confidence=detection_conf,
             is_active_interaction=self._active_interactions.get(hand_id, False),
@@ -618,7 +499,7 @@ class HandDetector:
             timestamp=now,
         )
 
-        # Spatial Perception
+        # 10. Spatial Representation Engine
         perception_obj = self.spatial_engine.process_hand(
             hand_id=hand_id,
             handedness=handedness,
@@ -641,20 +522,29 @@ class HandDetector:
             if (complete_gesture and complete_gesture.gesture_id != CompleteGestureId.NONE)
             else None
         )
+        perception_obj.active_representation = active_rep.value
+        perception_obj.viewpoint_mode = vp_mode.value
+        perception_obj.finger_centric = finger_centric_state.to_dict()
 
-        # Finger-Centric Perception (ghost path)
-        finger_centric_state = self.finger_centric_engine.process_hand(
-            hand_id=hand_id,
-            handedness=handedness,
-            raw_landmarks=raw_pts,
-            d_ref=d_ref,
-            palm_facing=finger_states.palm_facing,
-            timestamp=now,
-            visibilities=vis_list,
-            ext_ratios=finger_ratios,
-            motion_confidence=float(getattr(motion_state, "confidence", 0.60) or 0.60),
-            temporal_confidence=float(detection_conf),  # ghost conf carries temporal quality
-        )
+        # 11. Debug Visualization Annotations on Frame
+        if draw_landmarks and annotated_frame is not None:
+            if landmarks_proto is not None:
+                self.mp_drawing.draw_landmarks(
+                    annotated_frame,
+                    landmarks_proto,
+                    self.mp_hands.HAND_CONNECTIONS,
+                    self.mp_drawing_styles.get_default_hand_landmarks_style(),
+                    self.mp_drawing_styles.get_default_hand_connections_style(),
+                )
+            h, w = annotated_frame.shape[:2]
+            if is_cam_facing:
+                badge_text = f"[{active_rep.value}: {vp_mode.value}]"
+                wrist_px = (int(raw_pts[0, 0] * w), int(raw_pts[0, 1] * h))
+                text_pos = (max(10, wrist_px[0] - 60), max(25, wrist_px[1] - 20))
+                cv2.putText(annotated_frame, badge_text, text_pos, cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 230, 0), 2)
+                for tip_idx in [4, 8, 12, 16, 20]:
+                    tx, ty = int(raw_pts[tip_idx, 0] * w), int(raw_pts[tip_idx, 1] * h)
+                    cv2.circle(annotated_frame, (tx, ty), 6, (255, 240, 0), 2)
 
         return HandState(
             hand_id=hand_id,
@@ -667,7 +557,7 @@ class HandDetector:
             hand_scale_ref=d_ref,
             orientation_angles=orientation,
             palm_facing=finger_states.palm_facing,
-            finger_extension_ratios=finger_ratios,
+            finger_extension_ratios=fused_finger_ratios,
             finger_flexion_angles=flexion_angles,
             pinch_distance=pinch_dist,
             pinch_confidence=pinch_conf,

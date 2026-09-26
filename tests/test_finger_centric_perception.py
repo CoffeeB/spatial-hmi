@@ -569,3 +569,159 @@ class TestFingerCentricPerceptionEngine:
         # Tracking age should be continuous — index should have been tracked all 10 frames
         assert state.tip_states["index"].tracking_age == 10, \
             f"Finger identity should be preserved across viewpoint changes"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# End-to-End Camera-Facing Perception Tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _camera_facing_point_landmarks() -> np.ndarray:
+    """
+    Landmarks for a Right hand facing the camera, with the index finger
+    extended straight toward the camera (foreshortened along z) and the other
+    fingers curled/folded into the palm.
+    """
+    pts = np.zeros((21, 3), dtype=np.float32)
+    # Wrist
+    pts[0] = [0.50, 0.70, 0.0]
+
+    # Thumb (1-4): folded against palm
+    pts[1] = [0.44, 0.65, -0.01]
+    pts[2] = [0.42, 0.60, -0.02]
+    pts[3] = [0.43, 0.58, -0.02]
+    pts[4] = [0.45, 0.58, -0.01]
+
+    # Index (5-8): extended straight towards camera (high z foreshortening, tiny xy change)
+    pts[5] = [0.47, 0.55, 0.0]     # MCP
+    pts[6] = [0.471, 0.548, -0.05] # PIP
+    pts[7] = [0.472, 0.546, -0.10] # DIP
+    pts[8] = [0.473, 0.544, -0.16] # TIP (straight chain pointing toward camera)
+
+    # Middle (9-12): folded into palm (high flexion)
+    pts[9]  = [0.50, 0.55, 0.0]
+    pts[10] = [0.50, 0.58, -0.02]
+    pts[11] = [0.50, 0.62, 0.01]
+    pts[12] = [0.50, 0.65, 0.02]
+
+    # Ring (13-16): folded into palm
+    pts[13] = [0.53, 0.56, 0.0]
+    pts[14] = [0.53, 0.59, -0.02]
+    pts[15] = [0.53, 0.63, 0.01]
+    pts[16] = [0.53, 0.65, 0.02]
+
+    # Little (17-20): folded into palm
+    pts[17] = [0.56, 0.58, 0.0]
+    pts[18] = [0.56, 0.61, -0.02]
+    pts[19] = [0.56, 0.64, 0.01]
+    pts[20] = [0.56, 0.66, 0.02]
+
+    return pts
+
+
+class TestCameraFacingEndToEndPerception:
+    """Verifies that HandDetector dynamically shifts evidence to FINGER-CENTRIC."""
+
+    def test_hand_detector_camera_facing_point_gesture(self):
+        from src.perception.hand_detector import HandDetector
+        from src.landmarks.finger_state import FingerStateEnum
+        from src.gestures.hand_pose import HandPoseId
+
+        detector = HandDetector()
+
+        class MockLandmark:
+            def __init__(self, x, y, z):
+                self.x = x
+                self.y = y
+                self.z = z
+
+            def HasField(self, field):
+                return False
+
+        class MockClassification:
+            def __init__(self):
+                self.label = "Right"
+                self.score = 0.95
+
+        class MockClassificationList:
+            def __init__(self):
+                self.classification = [MockClassification()]
+
+        class MockResults:
+            def __init__(self, pts):
+                lm_list = type("MockLandmarkList", (), {
+                    "landmark": [MockLandmark(float(pts[i, 0]), float(pts[i, 1]), float(pts[i, 2])) for i in range(21)]
+                })()
+                self.multi_hand_landmarks = [lm_list]
+                self.multi_handedness = [MockClassificationList()]
+
+        pts = _camera_facing_point_landmarks()
+        detector.hands_detector.process = lambda frame_rgb: MockResults(pts)
+        detector.mp_drawing.draw_landmarks = lambda *args, **kwargs: None
+
+        frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+
+        # Process multiple frames to allow temporal tracking to stabilize
+        hands = []
+        for t in range(5):
+            hands, annotated = detector.process_frame(frame, timestamp=t * 0.033)
+
+        assert len(hands) == 1
+        h = hands[0]
+
+        # 1. Perception layer must have shifted to FINGER-CENTRIC
+        active_rep = h.perception.active_representation
+        assert active_rep == "FINGER_CENTRIC", f"Expected FINGER_CENTRIC, got {active_rep}"
+        assert h.perception.viewpoint_mode in ("CAMERA_FACING", "FORESHORTENED")
+
+        # 2. Index finger must be classified as EXTENDED despite 2D foreshortening
+        assert h.finger_states.index.state == FingerStateEnum.EXTENDED, \
+            f"Index should be EXTENDED, got {h.finger_states.index.state}"
+
+        # 3. Middle finger must remain FOLDED
+        assert h.finger_states.middle.state == FingerStateEnum.FOLDED
+
+        # 4. Pose must resolve to H004_INDEX_POINT
+        assert h.derived_pose is not None
+        assert h.derived_pose.pose_id == HandPoseId.H004_INDEX_POINT
+
+    def test_hmi_server_packet_contains_finger_centric_telemetry(self):
+        from src.communication.protocol import HMIPacket, HandTelemetry, SpatialCommand
+        from src.interaction.mapping import SpatialCommandType
+
+        cmd = SpatialCommand(
+            command_type=SpatialCommandType.IDLE,
+            interaction_state="OBSERVING",
+            cursor_ndc=(0.47, 0.54),
+            dominant_hand="Right",
+        )
+        telem_hand = HandTelemetry(
+            hand_id=1,
+            handedness="Right",
+            palm_center=(0.5, 0.7, 0.0),
+            pinch_confidence=0.0,
+            detection_confidence=0.95,
+            landmarks_normalized=[[0.5, 0.5, 0.0] for _ in range(21)],
+            active_representation="FINGER_CENTRIC",
+            viewpoint_mode="CAMERA_FACING",
+            finger_centric_telemetry={
+                "focal_finger": "index",
+                "viewpoint": {"mode": "CAMERA_FACING", "confidence": 0.92},
+                "fusion": {"active_representation": "FINGER_CENTRIC", "finger_weight": 0.85},
+            },
+        )
+        packet = HMIPacket(
+            command=cmd,
+            intent_state="OBSERVING",
+            active_gesture="H004_INDEX_POINT",
+            dominant_hand="Right",
+            intent_confidence=0.90,
+            hands=[telem_hand],
+            fps=60.0,
+            latency_ms=1.2,
+            timestamp=100.0,
+        )
+
+        packet_json = packet.model_dump_json()
+        assert "FINGER_CENTRIC" in packet_json
+        assert "CAMERA_FACING" in packet_json
+        assert "finger_centric_telemetry" in packet_json
