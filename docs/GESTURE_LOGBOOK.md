@@ -355,6 +355,100 @@ Evaluated across $N = 1,000$ individual digit observations across varying angles
 
 ---
 
+### Record TR-2026-0925-F: Level 2 Motion Primitives — Finger Motion Primitives, Dorsal Inclusion & Dual-Hand Independence
+* **Target Subsystem:** Kinematic Motion Tracker (`MotionPrimitiveTracker`, `FingerMotionState`, `HandDetector`, `finger_lab.js`)
+* **Test Date:** 2026-09-25
+* **Problem Addressed:**
+  1. The user requested: *"the motion should be tracked for each hand separately"*. Previous iterations shared motion buffers or tied tracking to transient detection loop indices.
+  2. The user requested: *"the motion primitive should also apply to the fingers, not just the hands, and there should be dorsal inclusion in the motion too"*. Hand-level translation alone misses essential articulation: finger extension, flexion, tapping, swiping, and axial hand flips (turning from palm to dorsal).
+* **Architectural Upgrades Implemented:**
+  1. *Dual-Hand Stable Anatomical Identity*:
+     - Bound hand motion state buffers to persistent anatomical handedness (`Left -> 0`, `Right -> 1`), preventing ID-flipping or crosstalk when hands cross or enter/exit view.
+     - Pruned missing hand state buffers when a hand leaves the field of view.
+  2. *Finger-Level Motion Primitives (`FingerMotionPrimitive`)*:
+     - Implemented tracking for all 5 digits (Thumb, Index, Middle, Ring, Little).
+     - Subtracted palm center velocity $\mathbf{v}_{\text{palm}}$ from fingertip velocity $\mathbf{v}_{\text{tip}}$ to isolate pure relative articulation: $\mathbf{v}_{\text{rel}} = \mathbf{v}_{\text{tip}} - \mathbf{v}_{\text{palm}}$.
+     - Tracked extension rate $\dot{e} = \frac{d(R_{\text{ext}})}{dt}$ (normalized change in extension ratio per second).
+     - Classified discrete finger primitives: `EXTENDING` ($\dot{e} > +0.20$), `FLEXING` ($\dot{e} < -0.20$), `TAPPING` (rapid downward strike and rebound within $350\,\text{ms}$), `SWIPING` (lateral tip excursion), `HOLD` (dwell without tip motion), and `STATIONARY`.
+  3. *Dorsal Inclusion & Hand Flip Primitives*:
+     - Tracked dorsal facing (`is_dorsal`, `palm_facing = "DORSAL"` vs `"PALM"`).
+     - Calculated longitudinal roll angular rate $\dot{\phi}_{\text{roll}} = \frac{d(\text{roll})}{dt}$.
+     - Classified axial flip transitions as high-level Level 2 primitives: `FLIP_TO_DORSAL` (pronation) and `FLIP_TO_PALM` (supination).
+  4. *Visualizer Telemetry & UI Dashboard*:
+     - Dual-hand independent motion cards with real-time dorsal pill indicators (`PALM` / `DORSAL`).
+     - Live finger motion badges on all 5 digit cards with dynamic direction/rate arrows (`↗ EXTENDING`, `↘ FLEXING`, `⚡ TAPPING`).
+     - On-canvas skeleton highlights: Amber knuckle arch and `• DORSAL` badge for dorsal view, pulsating halos on active fingertips, and floating Level 2 motion primitive badges.
+* **Empirical Validation Results:**
+  - Simultaneous dual-hand independent motion verified: Left moving UP while Right moves DOWN, Left stationary while Right moves RIGHT.
+  - Finger extension/flexion verified across all digits.
+  - Index and Thumb tap detection verified with strike-and-recover profile.
+  - Axial flips `FLIP_TO_DORSAL` and `FLIP_TO_PALM` verified with roll rate $> 60^\circ/\text{s}$.
+  - Full test suite: **89 / 89 Unit & Integration Tests Passing (100%)**.
+
+---
+
+### Record TR-2026-0925-C: Level 3 Complete Gestures — Pose + Motion Sequential Synthesis
+* **Target Gestures:**
+  - `G001P_POINT_SWIPE_LEFT` / `G002P_POINT_SWIPE_RIGHT` (Point while Swipe)
+  - `G001_PALM_SWIPE_LEFT` / `G002_PALM_SWIPE_RIGHT` (Open Palm Swipe)
+  - `G006_PINCH_SELECT` & `G007_PINCH_DRAG` (Sequential Multi-Phase Pinch)
+  - `G011_AIR_TAP` (Discrete Aim ➔ Strike ➔ Rebound Click)
+  - `G013_THUMBS_UP` / `G014_THUMBS_DOWN` / `G015_PEACE_MACRO` / `G016_OK_LOCK` (Stationary Hold Poses)
+  - `G020_AXIAL_FLIP_DORSAL` / `G021_AXIAL_FLIP_PALM` (Full Supination/Pronation Transitions)
+* **Test Date:** 2026-09-25
+* **Tested Engine Version:** v3.5
+* **Theoretical Framework:**
+  Gestures are modeled as **verifiable temporal event sequences** rather than single-frame snapshot labels:
+  - *Point while Swipe*: Hand in `POINT` configuration + rapid directional translation ($v_x < -0.18\,\text{m/s}$) + sufficient stroke displacement ($d \ge 0.045$) + high directional linearity ($|d_x| \ge 1.35 |d_y|$).
+  - *Pinch Sequence*: `APPROACH` (fingertip relative approach velocity $v < 0$) $\longrightarrow$ `CONTACT` ($d \le 0.32 d_{\text{ref}}$) $\longrightarrow$ `HOLD` ($\Delta t \ge 120\,\text{ms}$) $\longrightarrow$ `DRAG` ($\|\mathbf{v}\| > 0.20\,\text{m/s}$) $\longrightarrow$ `RELEASE` ($d > 0.42 d_{\text{ref}}$).
+  - *Air Tap Sequence*: `AIM` (steady pointing) $\longrightarrow$ `STRIKE` (rapid forward/downward velocity) $\longrightarrow$ `BOTTOM_OUT` (zero crossing) $\longrightarrow$ `REBOUND` (recovery within $280\,\text{ms}$).
+* **Empirical Validation Results:**
+  - `test_point_swipe_left_sequence`: Confirmed `G001P_POINT_SWIPE_LEFT` with event sequence `["PREPARE", "STROKE", "COMPLETED"]`.
+  - `test_palm_swipe_left_sequence`: Confirmed `G001_PALM_SWIPE_LEFT` distinguishing open palm from pointing.
+  - `test_pinch_approach_contact_hold_sequence`: Confirmed progression `APPROACH` $\to$ `CONTACT` $\to$ `HOLD` (`G006_PINCH_SELECT`).
+  - `test_pinch_drag_sequence`: Confirmed transition to `G007_PINCH_DRAG` under hand translation while maintaining pinch.
+  - `test_air_tap_sequence`: Confirmed `G011_AIR_TAP` upon rapid downward strike and rebound.
+  - `test_thumbs_up_hold_gesture`: Confirmed `G013_THUMBS_UP` with steady hold.
+  - Full test suite: **101 / 101 Unit & Integration Tests Passing (100%)**.
+
+---
+
+### Record TR-2026-0925-D: Level 3 Complete Gestures Expansion — Micro-Gestures, Single-Hand Pinch-to-Zoom, Axial Dials & UI Visualizer
+* **Target Gestures:**
+  - `G018_CLOCKWISE_DIAL` / `G019_COUNTER_CLOCKWISE_DIAL` (Circular trajectory tracking with 45° detents)
+  - `G022_PINCH_ZOOM_IN` / `G023_PINCH_ZOOM_OUT` (Single-hand pinch-to-zoom across depth thrust & held aperture scaling)
+  - `FM001_MICRO_PINCH_TAP` / `FM002_MICRO_MIDDLE_TAP` / `FM003_MICRO_DOUBLE_TAP` / `FM004_MICRO_INDEX_TRIGGER` (Sub-centimeter finger micro-gestures)
+  - `G017_QUICK_FLICK` (High-impulse ballistic dismiss flick)
+* **Multi-Finger Gesture Evolution (1F to 5F Taxonomy):**
+  - **Point Evolution (1F..5F):** `G005_1F_POINT` (1-Finger Point), `G005_2F_POINT` (2-Finger Point), `G005_3F_POINT` (3-Finger Point), `G005_4F_POINT` (4-Finger Point), `G005_5F_POINT` (5-Finger Point).
+  - **Swipe Evolution (1F..5F x 4 Directions):** 1-Finger through 5-Finger / Hand directional swipes (`G001_1F`..`G004_5F` Left, Right, Up, Down).
+  - **Rotate Evolution (1F..5F x CW/CCW):** 1-Finger through 5-Finger / Hand rotational dials (`G018_1F`..`G018_5F` Clockwise and `G019_1F`..`G019_5F` Counter-Clockwise).
+  - **Level 1 Pose Expansion:** Added `H017_FOUR_FINGER_POINT` and `H018_FIVE_FINGER_POINT` with `pointing_finger_count` extraction.
+* **Visualizer UI Integration:**
+  - Dedicated Level 3 Complete Gesture Hero Card in right panel (`visualization/index.html`, `style.css`, `finger_lab.js`).
+  - Real-time event sequence breadcrumbs (`APPROACH` ➔ `CONTACT` ➔ `HOLD` ➔ `DRAG`).
+  - Dynamic glowing activation borders, completion ripple pulse, and on-canvas floating pill badges.
+* **Test Status:** **107 / 107 Unit & Integration Tests Passing (100%)**.
+
+### 4.5 Architecture Expansion: Temporal Intent Engine (Layered Perception Pipeline)
+* **Date:** 2026-09-26
+* **Scope:** Replaced instantaneous frame-based reactions with a multi-layer temporal consensus pipeline where every layer stabilizes before the next is evaluated.
+* **Perception Windows:**
+  - **Finger States (L0):** 1–3 frames (EMA landmark smoothing $\alpha=0.65$ + temporal majority voting).
+  - **Hand Poses (L1):** 3–5 frames (Enter $\ge 0.80$, Exit $< 0.45$ hysteresis + anti-oscillation).
+  - **Motion Primitives (L2):** 5–10 frames (Independent velocity, tangential acceleration, linearity $\Lambda \ge 0.70$, directional consistency $\bar{C} \ge 0.85$).
+  - **Gesture Candidates (L3):** 8–15 frames (Leaky evidence accumulation, stroke completion).
+  - **Two-Hand Gestures:** 10–20 frames (Bimanual temporal synchronization).
+* **Intent Lock & 5-Tier Priority Hierarchy:**
+  - Exclusive interaction lock prevents gesture hijacking during continuous manipulation (Pinch, Drag, Dial).
+  - Priority Arbitration: Tier 1 (Pinch Selection) > Tier 2 (Two-Hand Manipulation) > Tier 3 (Swipes) > Tier 4 (Point Hover) > Tier 5 (Idle).
+* **Graceful Release:** Exponential easing decay ($0.85^k$) over 5 cooldown frames eliminates abrupt spatial snapping.
+* **Developer Debug Overlay:** Full HUD exposing Finger, Pose, Motion, Intent, Lock, and real-time explainability on the live camera viewport.
+* **Empirical Verification:** Single-frame spikes completely rejected; zero unintended gesture triggers during casual hand repositioning.
+* **Test Status:** **117 / 117 Unit & Integration Tests Passing (100%)**.
+
+---
+
 ## 5. Environmental & Distance Robustness Matrix
 
 Tested against $N = 500$ mixed interaction sequences under varying sensor and lighting conditions.
@@ -380,15 +474,32 @@ To maintain data integrity as Gestura evolves, every pull request must pass the 
 PYTHONPATH=. ./.venv/bin/python -m pytest tests/ -v
 ```
 
-Current test status: **75 / 75 Unit & Integration Tests Passing (100%)**.
+Current test status: **133 / 133 Unit & Integration Tests Passing (100%)**.
 
 1. `tests/test_camera_zoom.py`: Validates dynamic auto-zoom, distance tracking, multi-hand framing, and crop mapping.
 2. `tests/test_coordinate_transforms.py`: Validates NDC $\leftrightarrow$ Screen $\leftrightarrow$ 3D World projections.
 3. `tests/test_finger_states.py`: Validates Level 0 individual finger state classifications across 10 anatomical states.
-4. `tests/test_hand_poses.py`: Validates Level 1 static hand pose derivation (H001–H016) from Level 0 finger configurations.
-5. `tests/test_gestures.py`: Validates heuristic feature extractors for poses `H001–H008`.
-6. `tests/test_intent_state_machine.py`: Validates lifecycle transitions (`IDLE` $\rightarrow$ `CONFIRMED` $\rightarrow$ `RELEASE`).
-7. `tests/test_interaction_engine.py`: Validates velocity calculation, drop-off filtering, and context emission.
-8. `tests/test_gestura_v3.py`: Validates temporal slap detection, bimanual sync, and mutual exclusion precedence.
-9. `tests/test_smoothing.py`: Validates One-Euro and exponential moving average landmark filters.
-10. `tests/test_websocket_protocol.py`: Validates real-time JSON frame serializations at 60 FPS.
+4. `tests/test_hand_poses.py`: Validates Level 1 static hand pose derivation (H001–H018) from Level 0 finger configurations.
+5. `tests/test_motion_primitives.py`: Validates Level 2 independent motion tracking, dual-hand simultaneous motions, translations, depth, hold/dwell, orbital winding, finger-level extension/flexion/tap/swipe, and dorsal inclusion/axial flips.
+6. `tests/test_complete_gestures.py`: Validates Level 3 complete gesture synthesis, sequential state machines, and event sequence breadcrumbs.
+7. `tests/test_gestures.py`: Validates heuristic feature extractors for poses `H001–H008`.
+8. `tests/test_intent_state_machine.py`: Validates lifecycle transitions (`IDLE` $\rightarrow$ `CONFIRMED` $\rightarrow$ `RELEASING`).
+9. `tests/test_interaction_engine.py`: Validates velocity calculation, drop-off filtering, and context emission.
+10. `tests/test_gestura_v3.py`: Validates temporal slap detection, bimanual sync, and mutual exclusion precedence.
+11. `tests/test_smoothing.py`: Validates One-Euro and exponential moving average landmark filters.
+12. `tests/test_temporal_intent_engine.py`: Validates multi-layer observation windows (1-3F, 3-5F, 5-10F, 8-15F), finger jitter suppression, pose confirmation with hysteresis, linear vs curved swipe trajectory analysis, intent locking, priority arbitration, and graceful release easing.
+13. `tests/test_intention_decipherer.py`: Validates Level 0–3 multi-level intention deciphering, focal digit salience weighting ($w_{\text{focus}}$), pose interaction intents (`intended_action`), kinetic purposefulness & drift rejection, task intent synthesis, and sequential next-intent prediction.
+14. `tests/test_intent_engine_integration.py`: Validates end-to-end integration between static pose candidate fallbacks, evidence accumulation in observation buffers, FSM confirmation lifecycle, and synchronization with `InteractionEngine`.
+15. `tests/test_websocket_protocol.py`: Validates real-time JSON frame serializations at 60 FPS.
+
+---
+
+### Diagnosis & Resolution: Temporal Intent Engine Liveness
+
+- **Root Cause 1 (Candidate Gesture Starvation)**: `src/perception/hand_detector.py` previously drew `candidate_gname` exclusively from `complete_gesture`. Dynamic Level 3 recognizers only emit non-`NONE` gestures during completed kinematic strokes (e.g. swipes, taps, dials). Holding a steady static posture (Point, Pinch, Grab, Palm) yielded `candidate_gname = "NONE"`, causing `GestureCandidateBuffer` to immediately decay evidence by 40% and reset history, freezing the FSM in `IDLE`.
+  - **Fix**: Resolved candidate gesture hierarchically: active dynamic Level 3 complete gestures take precedence; when idle/none, the pipeline falls back to Level 1 `DerivedHandPose` (`derived_pose.canonical_name`) and its confidence.
+- **Root Cause 2 (Token Normalization in Evidence Buffer)**: `GestureCandidateBuffer` evaluated exact raw string equality. Switching between pose tokens and gesture identifiers (e.g., `"POINT"` vs `"G005_1F_POINT"`) caused evidence tearing. Added `_normalize_candidate()` to unify tokens into stable gesture families.
+- **Root Cause 3 (Duplicate FSM Disconnect)**: `InteractionEngine.process_hands()` previously ignored the primary hand's stabilized `intent_context` from `TemporalIntentEngine`, instead running an unlinked secondary FSM with single-frame heuristic classifiers. Updated `InteractionEngine` to consume and synchronize with `primary_hand.intent_context`.
+- **Root Cause 4 (Telemetry Casing)**: Stabilized finger summary in `FingerStateStabilizer` now provides both lowercase and capitalized keys, and `visualization/js/finger_lab.js` uses case-insensitive lookups, preventing `--` placeholder displays.
+
+

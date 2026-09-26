@@ -95,12 +95,17 @@ class CommunicationConfig(BaseModel):
     broadcast_interval_ms: float = 16.66
 
 
+from src.intent.temporal_intent_config import TemporalIntentConfig
+from src.stability.stability_config import StabilityConfig
+
 class HMIConfig(BaseModel):
     camera: CameraConfig = Field(default_factory=CameraConfig)
     perception: PerceptionConfig = Field(default_factory=PerceptionConfig)
     landmarks: LandmarksConfig = Field(default_factory=LandmarksConfig)
     gestures: GesturesConfig = Field(default_factory=GesturesConfig)
     intent: IntentConfig = Field(default_factory=IntentConfig)
+    temporal_intent: TemporalIntentConfig = Field(default_factory=TemporalIntentConfig)
+    stability: StabilityConfig = Field(default_factory=StabilityConfig)
     smoothing: SmoothingConfig = Field(default_factory=SmoothingConfig)
     interaction: InteractionConfig = Field(default_factory=InteractionConfig)
     communication: CommunicationConfig = Field(default_factory=CommunicationConfig)

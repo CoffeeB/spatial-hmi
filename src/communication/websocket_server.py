@@ -41,8 +41,24 @@ class HMIWebSocketServer:
         """Event loop runner."""
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
-        self.loop.run_until_complete(self._start_server())
-        self.loop.run_forever()
+        try:
+            self.loop.run_until_complete(self._start_server())
+            self.loop.run_forever()
+        finally:
+            try:
+                # Cancel all pending tasks cleanly to prevent destroyed pending task warnings
+                pending = [t for t in asyncio.all_tasks(self.loop) if not t.done()]
+                for t in pending:
+                    t.cancel()
+                if pending:
+                    self.loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                if self.server:
+                    self.server.close()
+                    self.loop.run_until_complete(self.server.wait_closed())
+            except Exception:
+                pass
+            finally:
+                self.loop.close()
 
     async def _start_server(self):
         """Initializes the websockets server."""
@@ -67,15 +83,18 @@ class HMIWebSocketServer:
         """
         Thread-safe method called from perception thread to broadcast telemetry packet to all connected clients.
         """
-        if not self.running or not self.loop or not self.clients:
+        if not self.running or not self.loop or self.loop.is_closed() or not self.clients:
             return
 
         payload = packet.model_dump_json()
-        asyncio.run_coroutine_threadsafe(self._broadcast(payload), self.loop)
+        try:
+            asyncio.run_coroutine_threadsafe(self._broadcast(payload), self.loop)
+        except RuntimeError:
+            pass
 
     async def _broadcast(self, payload: str):
         """Broadcasts payload to all active clients."""
-        if not self.clients:
+        if not self.clients or not self.running:
             return
         # Broadcast concurrently across active connections
         tasks = [client.send(payload) for client in self.clients]
@@ -84,6 +103,6 @@ class HMIWebSocketServer:
     def stop(self):
         """Stops the WebSocket server and cleans up asyncio loop."""
         self.running = False
-        if self.loop is not None:
+        if self.loop is not None and self.loop.is_running():
             self.loop.call_soon_threadsafe(self.loop.stop)
         logger.info("WebSocket server stopped.")

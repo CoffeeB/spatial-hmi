@@ -608,3 +608,75 @@ class TestHandPoseDerivation:
         assert pose.pose_id == HandPoseId.H004_INDEX_POINT
         assert pose.canonical_name == "POINT"
         assert pose.confidence >= 0.90
+
+    def test_derive_four_finger_point(self, classifier, base_landmarks):
+        """
+        Validates Rule 13b: H017 Four-Finger Point (Digits 2-5 extended, thumb folded/tucked).
+        """
+        fs = make_finger_states(
+            thumb=FingerStateEnum.FOLDED,
+            index=FingerStateEnum.EXTENDED,
+            middle=FingerStateEnum.EXTENDED,
+            ring=FingerStateEnum.EXTENDED,
+            little=FingerStateEnum.EXTENDED,
+        )
+        pose = classifier.classify_pose(fs, base_landmarks, d_ref=0.20)
+        assert pose.pose_id == HandPoseId.H017_FOUR_FINGER_POINT
+        assert pose.canonical_name == "FOUR_FINGER"
+        assert pose.pointing_finger_count == 4
+        assert pose.confidence >= 0.90
+
+    def test_derive_five_finger_point(self, classifier, base_landmarks):
+        """
+        Validates Rule 13c: H018 Five-Finger Point (All 5 digits extended tightly in pointing/knife formation).
+        """
+        pts = base_landmarks.copy()
+        # Bring thumb in close and parallel to index
+        pts[4] = [0.44, 0.40, 0.0]
+        fs = make_finger_states(
+            thumb=FingerStateEnum.EXTENDED,
+            index=FingerStateEnum.EXTENDED,
+            middle=FingerStateEnum.EXTENDED,
+            ring=FingerStateEnum.EXTENDED,
+            little=FingerStateEnum.EXTENDED,
+        )
+        pose = classifier.classify_pose(fs, pts, d_ref=0.20)
+        assert pose.pose_id == HandPoseId.H018_FIVE_FINGER_POINT
+        assert pose.canonical_name == "FIVE_FINGER"
+        assert pose.pointing_finger_count == 5
+        assert pose.confidence >= 0.90
+
+    def test_pointing_finger_count_progression(self, classifier, base_landmarks):
+        """
+        Validates derived pointing_finger_count across 1F through 5F poses.
+        """
+        # 1-finger: Index only
+        fs1 = make_finger_states(thumb=FingerStateEnum.FOLDED, index=FingerStateEnum.EXTENDED,
+                                 middle=FingerStateEnum.FOLDED, ring=FingerStateEnum.FOLDED, little=FingerStateEnum.FOLDED)
+        p1 = classifier.classify_pose(fs1, base_landmarks, d_ref=0.20)
+        assert p1.pointing_finger_count == 1
+
+        # 2-finger: Index + Middle (DOUBLE_POINT or PEACE)
+        fs2 = make_finger_states(thumb=FingerStateEnum.FOLDED, index=FingerStateEnum.EXTENDED,
+                                 middle=FingerStateEnum.EXTENDED, ring=FingerStateEnum.FOLDED, little=FingerStateEnum.FOLDED)
+        p2 = classifier.classify_pose(fs2, base_landmarks, d_ref=0.20)
+        assert p2.pointing_finger_count == 2
+
+        # 3-finger: Index + Middle + Ring
+        fs3 = make_finger_states(thumb=FingerStateEnum.FOLDED, index=FingerStateEnum.EXTENDED,
+                                 middle=FingerStateEnum.EXTENDED, ring=FingerStateEnum.EXTENDED, little=FingerStateEnum.FOLDED)
+        p3 = classifier.classify_pose(fs3, base_landmarks, d_ref=0.20)
+        assert p3.pointing_finger_count == 3
+
+        # 4-finger: Index + Middle + Ring + Little, thumb folded
+        fs4 = make_finger_states(thumb=FingerStateEnum.FOLDED, index=FingerStateEnum.EXTENDED,
+                                 middle=FingerStateEnum.EXTENDED, ring=FingerStateEnum.EXTENDED, little=FingerStateEnum.EXTENDED)
+        p4 = classifier.classify_pose(fs4, base_landmarks, d_ref=0.20)
+        assert p4.pointing_finger_count == 4
+
+        # 5-finger: All digits extended
+        fs5 = make_finger_states(thumb=FingerStateEnum.EXTENDED, index=FingerStateEnum.EXTENDED,
+                                 middle=FingerStateEnum.EXTENDED, ring=FingerStateEnum.EXTENDED, little=FingerStateEnum.EXTENDED)
+        p5 = classifier.classify_pose(fs5, base_landmarks, d_ref=0.20)
+        assert p5.pointing_finger_count == 5
+

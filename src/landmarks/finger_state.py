@@ -80,6 +80,11 @@ class FingerStateDetail:
     dip_flexion_deg: float = 0.0
     contact_target: Optional[str] = None
     diagnostics: List[str] = field(default_factory=list)
+    # Level 0 Intention Deciphering & Focal Attention Tracking
+    intention: str = "PASSIVE_RESTING"
+    is_focal: bool = False
+    focus_weight: float = 0.0
+    focal_role: str = "PASSIVE_RESTING"
 
     def __str__(self) -> str:
         return f"{self.finger.value.capitalize():<8}: {self.state.value}"
@@ -123,6 +128,10 @@ class HandFingerStates:
                 "dip_deg": round(float(d.dip_flexion_deg), 1),
                 "contact_target": d.contact_target,
                 "diagnostics": d.diagnostics,
+                "intention": getattr(d, "intention", "PASSIVE_RESTING"),
+                "is_focal": getattr(d, "is_focal", False),
+                "focus_weight": round(float(getattr(d, "focus_weight", 0.0)), 2),
+                "focal_role": getattr(d, "focal_role", "PASSIVE_RESTING"),
             }
         return res
 
@@ -699,6 +708,25 @@ class FingerStateClassifier:
                 contact_target=thumb_contact,
                 diagnostics=thumb_diags,
             )
+
+        # Level 0 Intention Deciphering & Focal Attention Tracking
+        from src.intent.intention_decipherer import Level0FingerIntentionDecipherer
+        states_map = {fn.value.capitalize(): classified_digits[fn].state.value for fn in FingerName}
+        details_map = {
+            fn.value.capitalize(): {
+                "contact_target": classified_digits[fn].contact_target,
+                "extension_ratio": classified_digits[fn].extension_ratio,
+            }
+            for fn in FingerName
+        }
+        l0_intentions = Level0FingerIntentionDecipherer.decipher(states_map, details_map, palm_facing)
+        for fn in FingerName:
+            cap = fn.value.capitalize()
+            if cap in l0_intentions:
+                classified_digits[fn].intention = l0_intentions[cap]["intention"]
+                classified_digits[fn].is_focal = l0_intentions[cap]["is_focal"]
+                classified_digits[fn].focus_weight = l0_intentions[cap]["focus_weight"]
+                classified_digits[fn].focal_role = l0_intentions[cap]["focal_role"]
 
         return HandFingerStates(
             thumb=classified_digits[FingerName.THUMB],

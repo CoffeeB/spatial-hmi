@@ -1,35 +1,36 @@
 """
-Gestura v3 — Natural Interaction State Machine.
+Gestura v3 & v4 — Natural Interaction State Machine & Temporal Intent Engine.
 
 Lifecycle:
-  IDLE → OBSERVING → CANDIDATE → CONFIRMED → ACTIVE → RELEASE → IDLE
+  IDLE → OBSERVING → CANDIDATE → CONFIRMED → ACTIVE → RELEASING → IDLE
 
-Core Principle:
-  - Gesture Candidate: a possible gesture detected (accumulating evidence)
-  - Intent: confidence that user truly meant it (temporal consistency confirmed)
-  - Action: executed in 3D world only when CONFIRMED or ACTIVE
-
-Graceful Degradation:
-  - If confidence drops below threshold: freeze interaction and gracefully transition
-    to RELEASE, never snapping unpredictably.
-  - Drop guard: when hand tracking is lost, active gesture is zeroed immediately to
-    prevent stale velocity from leaking, holding position during grace timeout.
+Core Principles:
+  - Interpretation requires evidence, not a single frame.
+  - Candidate: accumulates temporal consensus across observation windows.
+  - Confirmed: satisfies all thresholds, dispatches exactly one interaction.
+  - Active: continuous 3D manipulation.
+  - Releasing: graceful decay with interpolation / easing, never snapping abruptly.
+  - Intent Lock: prevents mid-interaction gesture hijacking.
+  - Priority Engine: Pinch > Two-Hand > Swipe > Hover > Idle.
 """
 
-import time
 from enum import Enum
-from typing import Dict, Optional
+import time
+from typing import Any, Dict, Optional, Set
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from src.gestures.gesture_types import GestureType, RecognizedGesture
 from src.intent.intent_filter import TemporalIntentFilter
+from src.intent.intent_lock import IntentLockSystem
+from src.intent.priority_manager import GesturePriorityManager, GesturePriorityTier
+from src.intent.temporal_intent_config import TemporalIntentConfig
 from src.utils.logging_config import setup_logger
 
 logger = setup_logger("intent_fsm_v3")
 
 
-SWIPE_GESTURES = {
+SWIPE_GESTURES: Set[GestureType] = {
     GestureType.SWIPE_LEFT,
     GestureType.SWIPE_RIGHT,
     GestureType.SWIPE_UP,
@@ -38,18 +39,18 @@ SWIPE_GESTURES = {
 
 
 class InteractionState(str, Enum):
-    """Gestura v3 interaction state lifecycle."""
-    IDLE       = "IDLE"        # No hand or hand at rest / dropped
-    OBSERVING  = "OBSERVING"   # Hand visible, observing posture & cursor tracking only
+    """Gestura interaction state lifecycle."""
+    IDLE       = "IDLE"        # No hand detected or hand at rest
+    OBSERVING  = "OBSERVING"   # Hand visible, collecting temporal evidence, no commands
     CANDIDATE  = "CANDIDATE"   # Possible gesture detected, temporal evidence accumulating
-    CONFIRMED  = "CONFIRMED"   # Evidence threshold reached, gesture confirmed as intentional
-    ACTIVE     = "ACTIVE"      # Interaction actively driving 3D manipulation
-    RELEASE    = "RELEASE"     # Graceful release & cooldown before return
-    RELEASING  = "RELEASE"     # Backward-compatible alias for existing tests
+    CONFIRMED  = "CONFIRMED"   # Evidence threshold reached, dispatched exactly once
+    ACTIVE     = "ACTIVE"      # Continuous 3D manipulation (dragging, rotating, scaling)
+    RELEASING  = "RELEASING"   # Graceful decay with easing interpolation, never snaps abruptly
+    RELEASE    = "RELEASING"   # Backward-compatible alias for existing test suites
 
 
 class IntentContext(BaseModel):
-    """Immutable snapshot of intent state and telemetry."""
+    """Immutable snapshot of temporal intent state and telemetry."""
     state: InteractionState
     active_gesture: GestureType
     candidate_gesture: GestureType = GestureType.NONE
@@ -60,18 +61,23 @@ class IntentContext(BaseModel):
     state_duration_sec: float
     timestamp: float
 
-    # Confidence telemetry (Gestura v3 schema)
+    # Confidence telemetry
     hand_confidence: float = 1.0      # MediaPipe detection confidence
     gesture_confidence: float = 0.0   # Instantaneous classifier score
     tracking_confidence: float = 1.0  # Quality estimate
+
+    # Easing and Locking telemetry
+    easing_factor: float = 1.0        # Smooth easing multiplier for camera/object interpolation [0, 1]
+    is_locked: bool = False           # Whether intent lock is actively engaged
+    locked_by: Optional[str] = None   # Gesture family holding the lock
+    priority_tier: Optional[str] = None # Current active priority tier
 
 
 class InteractionStateMachine:
     """
     Finite State Machine managing temporal intent verification.
-
-    Prevents false activations by requiring temporal consistency over multiple
-    frames (via TemporalIntentFilter) before confirming actions.
+    Requires temporal consistency over multiple frames before confirming actions.
+    Integrates Intent Lock and Priority Management.
     """
 
     def __init__(
@@ -82,14 +88,22 @@ class InteractionStateMachine:
         candidate_frames: int = 2,
         evidence_lambda: float = 0.75,
         hand_loss_timeout_sec: float = 0.80,
+        config: Optional[TemporalIntentConfig] = None,
     ):
+        self.config = config or TemporalIntentConfig()
+
+        # Allow override from explicit constructor args for backward compatibility
         self.activation_threshold = activation_threshold
         self.release_threshold = release_threshold
         self.confirm_frames = confirm_frames
         self.candidate_frames = candidate_frames
         self.hand_loss_timeout_sec = hand_loss_timeout_sec
+        self.evidence_lambda = evidence_lambda
 
-        self.filter = TemporalIntentFilter(evidence_lambda=evidence_lambda)
+        self.filter = TemporalIntentFilter(evidence_lambda=self.evidence_lambda)
+        self.lock_system = IntentLockSystem(self.config)
+        self.priority_manager = GesturePriorityManager(self.config)
+
         self.state: InteractionState = InteractionState.IDLE
         self.active_gesture: GestureType = GestureType.NONE
         self.candidate_gesture: GestureType = GestureType.NONE
@@ -99,9 +113,26 @@ class InteractionStateMachine:
         self.state_enter_timestamp: float = time.time()
         self.last_hand_seen_timestamp: float = 0.0
 
+        # Easing decay during RELEASING
+        self._easing_factor: float = 1.0
+
         # Telemetry
         self._last_inst_conf: float = 0.0
         self._last_tracking_conf: float = 1.0
+
+    def reset(self):
+        """Resets the state machine back to IDLE."""
+        self.state = InteractionState.IDLE
+        self.active_gesture = GestureType.NONE
+        self.candidate_gesture = GestureType.NONE
+        self.target_object_id = None
+        self.consecutive_frames = 0
+        self.state_enter_timestamp = time.time()
+        self.last_hand_seen_timestamp = 0.0
+        self._easing_factor = 1.0
+        self.filter.reset()
+        self.lock_system.reset()
+        self.priority_manager.reset()
 
     def update(
         self,
@@ -114,7 +145,16 @@ class InteractionStateMachine:
         """
         now = timestamp if timestamp is not None else time.time()
 
-        # ── Hand absent / lost ─────────────────────────────────────────────
+        if hand_detected and recognized_gesture is None:
+            recognized_gesture = RecognizedGesture(
+                gesture=GestureType.NONE,
+                confidence=0.0,
+                hand_id=0,
+                handedness="Right",
+                timestamp=now,
+            )
+
+        # ── 1. Hand absent / lost ─────────────────────────────────────────
         if not hand_detected or recognized_gesture is None:
             time_since_last = now - self.last_hand_seen_timestamp
 
@@ -124,20 +164,24 @@ class InteractionStateMachine:
                     InteractionState.CONFIRMED,
                     InteractionState.CANDIDATE,
                 ):
-                    self._transition_to(InteractionState.RELEASE, GestureType.NONE, now)
-                elif self.state == InteractionState.RELEASE:
+                    self._transition_to(InteractionState.RELEASING, GestureType.NONE, now)
+                elif self.state == InteractionState.RELEASING:
                     self._transition_to(InteractionState.IDLE, GestureType.NONE, now)
                 else:
                     self._transition_to(InteractionState.IDLE, GestureType.NONE, now)
             else:
-                # Within grace window: freeze active gesture immediately to hold steady
+                # Within grace window: freeze active gesture to hold steady during repositioning
                 self.active_gesture = GestureType.NONE
+
+            # During RELEASING, smoothly ease decay
+            if self.state == InteractionState.RELEASING:
+                self._easing_factor *= self.config.intent_fsm.easing_decay_rate
 
             self._last_inst_conf = 0.0
             self.consecutive_frames += 1
             return self._build_context(now, 0.0, 0.0)
 
-        # ── Hand present ──────────────────────────────────────────────────
+        # ── 2. Hand present ───────────────────────────────────────────────
         self.last_hand_seen_timestamp = now
         curr_g = recognized_gesture.gesture
         curr_conf = recognized_gesture.confidence
@@ -145,16 +189,32 @@ class InteractionStateMachine:
         self._last_inst_conf = curr_conf
         self._last_tracking_conf = curr_conf
 
+        # ── 3. Intent Lock & Priority Filtering ───────────────────────────
+        # Check if gesture is allowed under active intent lock
+        if self.lock_system.is_locked:
+            if not self.lock_system.is_gesture_allowed(curr_g.value):
+                # Suppressed by lock: force gesture to NONE
+                curr_g = GestureType.NONE
+                curr_conf = 0.0
+
+        # Arbitrate priority against current state
+        is_active = self.state == InteractionState.ACTIVE
+        is_allowed, _, _ = self.priority_manager.arbitrate(curr_g.value, current_state_is_active=is_active)
+        if not is_allowed:
+            curr_g = GestureType.NONE
+            curr_conf = 0.0
+
         # Update evidence accumulator
         evidence_map = self.filter.update(curr_g, curr_conf)
         current_evidence = evidence_map.get(curr_g, 0.0)
 
-        # ── State Transitions ─────────────────────────────────────────────
+        # ── 4. State Transitions (IDLE -> OBSERVING -> CANDIDATE -> CONFIRMED -> ACTIVE -> RELEASING -> IDLE)
         if self.state == InteractionState.IDLE:
             self._transition_to(InteractionState.OBSERVING, GestureType.NONE, now)
 
         elif self.state == InteractionState.OBSERVING:
-            # Swipe gestures are temporally vetted by TemporalSlapDetector — trigger ACTIVE immediately
+            self._easing_factor = 1.0
+            # Swipes are temporally vetted by sequence trackers — trigger ACTIVE
             if curr_g in SWIPE_GESTURES and curr_conf >= 0.35:
                 self.candidate_gesture = curr_g
                 self._transition_to(InteractionState.ACTIVE, curr_g, now)
@@ -167,8 +227,9 @@ class InteractionStateMachine:
             if curr_g in SWIPE_GESTURES and curr_conf >= 0.35:
                 self.candidate_gesture = curr_g
                 self._transition_to(InteractionState.ACTIVE, curr_g, now)
-            elif curr_g == self.active_gesture and current_evidence >= self.activation_threshold:
+            elif curr_g == self.candidate_gesture and current_evidence >= self.activation_threshold:
                 if self.consecutive_frames >= self.confirm_frames:
+                    # Promotes to CONFIRMED
                     self._transition_to(InteractionState.CONFIRMED, curr_g, now)
             elif (
                 current_evidence < self.activation_threshold * 0.28
@@ -179,25 +240,37 @@ class InteractionStateMachine:
                 self._transition_to(InteractionState.OBSERVING, GestureType.NONE, now)
 
         elif self.state == InteractionState.CONFIRMED:
-            # Confirmed intent promotes directly to ACTIVE action
+            # Confirmed intent dispatches interaction and promotes to ACTIVE manipulation
+            # Acquire lock on Pinch / Continuous Drag
+            if curr_g in (GestureType.PINCH, GestureType.GRAB) and self.config.lock.lock_on_pinch:
+                self.lock_system.acquire_lock(curr_g.value, self.target_object_id, now)
+
             self._transition_to(InteractionState.ACTIVE, self.active_gesture, now)
 
         elif self.state == InteractionState.ACTIVE:
-            # Swipes are transient impulses: complete after 1 active frame and return to OBSERVING
+            self._easing_factor = 1.0
+            # Swipes are transient impulses: complete after active frame and return to OBSERVING
             if self.active_gesture in SWIPE_GESTURES:
                 self.candidate_gesture = GestureType.NONE
+                self.lock_system.release_lock(now)
+                self.priority_manager.release_active()
                 self._transition_to(InteractionState.OBSERVING, GestureType.NONE, now)
             # Release conditions:
             # (a) Open palm release detected
-            # (b) Confidence falls below release threshold (graceful release, never snap)
+            # (b) Confidence falls below release threshold (graceful release with easing)
             elif curr_g == GestureType.OPEN_PALM or current_evidence < self.release_threshold:
                 self.candidate_gesture = GestureType.NONE
-                self._transition_to(InteractionState.RELEASE, GestureType.RELEASE, now)
+                self.lock_system.release_lock(now)
+                self.priority_manager.release_active()
+                self._transition_to(InteractionState.RELEASING, GestureType.RELEASE, now)
 
-        elif self.state == InteractionState.RELEASE:
-            # Extended cooldown to prevent immediate jittery reactivation
-            if self.consecutive_frames >= 5:
+        elif self.state == InteractionState.RELEASING:
+            # Graceful release with exponential easing decay
+            self._easing_factor *= self.config.intent_fsm.easing_decay_rate
+
+            if self.consecutive_frames >= self.config.intent_fsm.release_cooldown_frames:
                 self.candidate_gesture = GestureType.NONE
+                self._easing_factor = 0.0
                 self._transition_to(InteractionState.OBSERVING, GestureType.NONE, now)
 
         self.consecutive_frames += 1
@@ -209,16 +282,24 @@ class InteractionStateMachine:
         gesture: GestureType,
         timestamp: float,
     ):
-        """Clean state transition with reset of frame counter."""
+        """Clean state transition with reset of frame counter and easing setup."""
         if self.state != new_state:
             self.state = new_state
             self.active_gesture = gesture
             self.consecutive_frames = 0
             self.state_enter_timestamp = timestamp
-            if new_state == InteractionState.IDLE:
+
+            if new_state == InteractionState.ACTIVE:
+                self._easing_factor = 1.0
+            elif new_state == InteractionState.RELEASING:
+                self._easing_factor = 1.0
+            elif new_state == InteractionState.IDLE:
                 self.target_object_id = None
                 self.candidate_gesture = GestureType.NONE
+                self._easing_factor = 0.0
                 self.filter.reset()
+                self.lock_system.reset()
+                self.priority_manager.reset()
 
     def _build_context(
         self,
@@ -228,6 +309,9 @@ class InteractionStateMachine:
     ) -> IntentContext:
         """Constructs an immutable telemetry snapshot."""
         duration = timestamp - self.state_enter_timestamp
+        lock_tel = self.lock_system.get_telemetry()
+        priority_tel = self.priority_manager.get_telemetry()
+
         return IntentContext(
             state=self.state,
             active_gesture=self.active_gesture,
@@ -241,4 +325,8 @@ class InteractionStateMachine:
             hand_confidence=float(self._last_tracking_conf),
             gesture_confidence=float(inst_conf),
             tracking_confidence=float(self._last_tracking_conf),
+            easing_factor=float(self._easing_factor),
+            is_locked=bool(lock_tel["is_locked"]),
+            locked_by=lock_tel["locked_by"] if lock_tel["is_locked"] else None,
+            priority_tier=priority_tel["active_tier"],
         )

@@ -24,6 +24,13 @@ class GestureType(str, Enum):
     SWIPE_DOWN = "SWIPE_DOWN"  # Slap / swipe down
     SPREAD_FINGERS = "SPREAD_FINGERS"  # Spreading fingers wide -> zoom in
     SQUEEZE_FINGERS = "SQUEEZE_FINGERS"  # Squeezing fingers together -> zoom out
+    THUMBS_UP = "THUMBS_UP"  # Affirmative / confirm
+    THUMBS_DOWN = "THUMBS_DOWN"  # Dismiss / decline
+    PEACE = "PEACE"  # Two-finger V selection
+    TWO_HAND_PINCH = "TWO_HAND_PINCH"  # Bimanual pinch
+    OK_RING = "OK_RING"  # Thumb + index ring
+    GUN = "GUN"  # Thumb up + index forward
+    SHAKA = "SHAKA"  # Call-me / thumb + pinky
 
 
 class RecognizedGesture(BaseModel):

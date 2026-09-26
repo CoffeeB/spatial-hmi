@@ -160,6 +160,8 @@ def main():
 
             # Process Interaction Engine (FSM + Smoothing + Command Mapping)
             command, intent_ctx, primary_hand = engine.process_hands(hand_states, timestamp=capture_time)
+            if primary_hand is not None:
+                detector.notify_interaction_state(primary_hand.hand_id, intent_ctx.state.value == "ACTIVE")
 
             # Build Telemetry Packet
             now = time.time()
@@ -168,6 +170,21 @@ def main():
             telemetry_hands = []
             for h in hand_states:
                 norm_pts = [[float(p[0]), float(p[1]), float(p[2])] for p in h.normalized_landmarks_array]
+                m = getattr(h, "motion_state", None)
+                m_prim = m.motion_primitive.value if m and hasattr(m.motion_primitive, "value") else "STATIONARY"
+                m_dyn = m.dynamic_state.value if m and hasattr(m.dynamic_state, "value") else "STATIONARY"
+                m_vel = [float(v) for v in m.velocity] if m else [0.0, 0.0, 0.0]
+                m_acc = [float(a) for a in m.acceleration] if m else [0.0, 0.0, 0.0]
+                m_traj = [[float(c) for c in pt] for pt in m.trajectory] if (m and hasattr(m, "trajectory") and m.trajectory) else []
+                cg = getattr(h, "complete_gesture", None)
+                cg_id = cg.gesture_id.value if cg and hasattr(cg.gesture_id, "value") else "NONE"
+                cg_name = cg.canonical_name if cg else "NONE"
+                cg_cat = cg.category.value if cg and hasattr(cg.category, "value") else "IDLE"
+                cg_phase = cg.phase if cg else "NEUTRAL"
+                cg_events = list(cg.event_sequence) if cg else []
+                cg_metrics = dict(cg.metrics) if cg else {}
+                cg_completed = bool(cg.is_stroke_completed) if cg else False
+
                 telemetry_hands.append(
                     HandTelemetry(
                         hand_id=h.hand_id,
@@ -186,6 +203,58 @@ def main():
                         pose_predicates=h.derived_pose.satisfied_predicates if getattr(h, "derived_pose", None) else [],
                         finger_config_summary=h.derived_pose.configuration.summary() if getattr(h, "derived_pose", None) else "",
                         palm_facing=getattr(h, "palm_facing", "PALM"),
+                        pose_intention=getattr(h.derived_pose, "pose_intention", "RESTING_PALM") if getattr(h, "derived_pose", None) else "RESTING_PALM",
+                        focal_digits=getattr(h.derived_pose, "focal_digits", []) if getattr(h, "derived_pose", None) else [],
+                        intended_action=getattr(h.derived_pose, "intended_action", "") if getattr(h, "derived_pose", None) else "",
+                        motion_primitive=m_prim,
+                        motion_speed=float(m.speed) if m else 0.0,
+                        motion_velocity=m_vel,
+                        motion_acceleration=m_acc,
+                        motion_tangential_accel=float(m.tangential_acceleration) if m else 0.0,
+                        motion_dynamic_state=m_dyn,
+                        motion_direction=str(m.primary_direction) if m else "STATIONARY",
+                        motion_secondary_direction=m.secondary_direction if m else None,
+                        motion_heading_deg=float(m.heading_deg) if m else 0.0,
+                        motion_displacement=float(m.displacement_magnitude) if m else 0.0,
+                        motion_path_length=float(m.cumulative_path_length) if m else 0.0,
+                        motion_linearity=float(m.linearity) if m else 1.0,
+                        stroke_duration_ms=float(m.stroke_duration_ms) if m else 0.0,
+                        dwell_duration_ms=float(m.dwell_duration_ms) if m else 0.0,
+                        is_holding=bool(m.is_holding) if m else False,
+                        is_releasing=bool(m.is_releasing) if m else False,
+                        motion_summary=m.summary() if m else "",
+                        motion_intention=getattr(m, "motion_intention", "STATIC_POSTURE") if m else "STATIC_POSTURE",
+                        intentionality_score=float(getattr(m, "intentionality_score", 0.0)) if m else 0.0,
+                        is_purposeful=bool(getattr(m, "is_purposeful", False)) if m else False,
+                        is_dorsal=bool(getattr(m, "is_dorsal", False)) if m else False,
+                        facing_flip=str(getattr(m, "facing_flip", "STABLE")) if m else "STABLE",
+                        roll_velocity=float(getattr(m, "roll_velocity", 0.0)) if m else 0.0,
+                        finger_motions={
+                            f_name: {
+                                "primitive": f_state.motion_primitive.value,
+                                "tip_speed": round(float(f_state.tip_speed), 3),
+                                "relative_speed": round(float(f_state.relative_speed), 3),
+                                "extension_rate": round(float(f_state.extension_rate), 3),
+                                "dynamic_state": f_state.dynamic_state.value,
+                                "is_tapping": bool(f_state.is_tapping),
+                                "is_extending": bool(f_state.is_extending),
+                                "is_flexing": bool(f_state.is_flexing),
+                                "is_holding": bool(f_state.is_holding),
+                            }
+                            for f_name, f_state in (m.finger_motions.items() if (m and hasattr(m, "finger_motions") and m.finger_motions) else [])
+                        },
+                        trajectory_points=m_traj,
+                        complete_gesture_id=cg_id,
+                        complete_gesture_name=cg_name,
+                        gesture_category=cg_cat,
+                        gesture_phase=cg_phase,
+                        gesture_event_sequence=cg_events,
+                        gesture_metrics=cg_metrics,
+                        is_stroke_completed=cg_completed,
+                        task_intent=getattr(cg, "task_intent", "IDLE_MONITORING") if cg else "IDLE_MONITORING",
+                        predicted_next_intent=getattr(cg, "predicted_next_intent", "NONE") if cg else "NONE",
+                        temporal_telemetry=getattr(h, "temporal_telemetry", {}) or {},
+                        stability_telemetry=getattr(h, "stability_telemetry", {}) or {},
                     )
                 )
 
@@ -201,6 +270,14 @@ def main():
                     import base64
                     video_b64 = base64.b64encode(buf).decode("ascii")
 
+            primary_telem = getattr(primary_hand, "temporal_telemetry", None) if primary_hand else None
+            if not primary_telem and telemetry_hands:
+                primary_telem = telemetry_hands[0].temporal_telemetry
+
+            primary_stab = getattr(primary_hand, "stability_telemetry", None) if primary_hand else None
+            if not primary_stab and telemetry_hands:
+                primary_stab = getattr(telemetry_hands[0], "stability_telemetry", None)
+
             packet = HMIPacket(
                 command=command,
                 intent_state=intent_ctx.state.value,
@@ -215,6 +292,8 @@ def main():
                 video_frame_b64=video_b64,
                 camera_zoom=float(zoom_controller.current_zoom),
                 camera_zoom_tracking=bool(zoom_controller.is_tracking),
+                temporal_intent=primary_telem,
+                stability=primary_stab,
                 timestamp=now,
             )
 

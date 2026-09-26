@@ -43,6 +43,83 @@ intent:
   candidate_frames: 1
   hand_loss_timeout_sec: 0.25
 
+temporal_intent:
+  windows:
+    finger_window: 3
+    pose_window: 5
+    motion_window: 8
+    gesture_window: 12
+    two_hand_window: 16
+  finger:
+    smoothing_alpha: 0.65
+    min_confidence: 0.80
+    temporal_majority_threshold: 0.66
+    jitter_deadzone_ndc: 0.0035
+  pose:
+    enter_threshold: 0.80
+    exit_threshold: 0.45
+    min_confirm_frames: 4
+    max_oscillation_history: 10
+  motion:
+    min_velocity_threshold: 0.20
+    stationary_velocity_threshold: 0.08
+    direction_consistency_threshold: 0.82
+    min_displacement: 0.035
+    min_duration_ms: 80.0
+    max_duration_ms: 380.0
+    curvature_reject_threshold: 0.68
+  swipe:
+    min_velocity: 1.8
+    min_distance: 140
+    min_direction_consistency: 0.85
+    min_duration_ms: 100.0
+    max_duration_ms: 350.0
+    min_linearity: 0.70
+    refractory_period_ms: 220.0
+  intent_fsm:
+    activation_threshold: 0.50
+    release_threshold: 0.25
+    evidence_lambda: 0.75
+    candidate_frames: 2
+    confirm_frames: 4
+    hand_loss_timeout_sec: 0.80
+    release_cooldown_frames: 5
+    easing_decay_rate: 0.85
+  lock:
+    lock_on_pinch: true
+    lock_on_drag: true
+    suppress_secondary_gestures: true
+    timeout_sec: 3.0
+
+stability:
+  finger_window: 3
+  pose_window: 5
+  motion_window: 8
+  gesture_window: 12
+  two_hand_window: 16
+  dead_zone_px: 18.0
+  dead_zone_ndc: 0.025
+  dead_zone_scale_with_dref: true
+  enter_threshold: 0.88
+  exit_threshold: 0.62
+  point_hold_ms: 80.0
+  pinch_hold_ms: 120.0
+  fist_hold_ms: 150.0
+  open_palm_hold_ms: 100.0
+  default_hold_ms: 100.0
+  weight_recognition: 0.35
+  weight_temporal: 0.25
+  weight_motion: 0.20
+  weight_persistence: 0.20
+  stability_threshold: 0.85
+  tremor_speed_threshold: 0.18
+  tremor_max_displacement: 0.020
+  twitch_duration_ms: 70.0
+  transition_min_duration_ms: 60.0
+  transition_max_duration_ms: 350.0
+  lock_exit_threshold: 0.45
+  active_preservation_frames: 6
+
 smoothing:
   filter_type: "one_euro" # "one_euro", "ema", or "none"
   one_euro:

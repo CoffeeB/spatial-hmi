@@ -51,6 +51,20 @@ class HandState:
     derived_pose: Optional[Any] = None
     palm_facing: str = "PALM"  # "PALM" (front), "DORSAL" (back), or "SIDE" (edge-on)
 
+    # Level 2 Motion Primitives ("How is the hand moving over time?")
+    motion_state: Optional[Any] = None
+
+    # Level 3 Complete Gestures ("Compose Pose + Motion into observable event sequences")
+    complete_gesture: Optional[Any] = None
+
+    # Level 4 & 5 Temporal Intent Telemetry & Debug Layer
+    temporal_telemetry: Optional[Any] = None
+    intent_context: Optional[Any] = None
+
+    # Stability Engine Context & Telemetry
+    stability_context: Optional[Any] = None
+    stability_telemetry: Optional[Dict[str, Any]] = None
+
     # Tracking Quality
     detection_confidence: float = 1.0
     timestamp: float = 0.0

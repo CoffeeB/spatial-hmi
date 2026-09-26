@@ -1,0 +1,49 @@
+# Gestura Stability Engine Configuration File
+# Eliminates false positives from natural human hand readjustments, tremor, and twitches.
+
+# ── 1. Observation Window Buffers (in frames) ───────────────────────────
+finger_window: 3
+pose_window: 5
+motion_window: 8
+gesture_window: 12
+two_hand_window: 16
+
+# ── 2. Spatial Palm Motion Dead Zone ────────────────────────────────────
+dead_zone_px: 18.0
+dead_zone_ndc: 0.025
+dead_zone_scale_with_dref: true
+dead_zone_smoothing: 0.85
+
+# ── 3. Pose Hysteresis Thresholds ───────────────────────────────────────
+enter_threshold: 0.88
+exit_threshold: 0.62
+confidence_decay_rate: 0.85
+
+# ── 4. Intentional Hold Durations (milliseconds) ────────────────────────
+# The hold timer begins only AFTER the pose becomes confirmed and stable
+point_hold_ms: 80.0
+pinch_hold_ms: 120.0
+fist_hold_ms: 150.0
+open_palm_hold_ms: 100.0
+default_hold_ms: 100.0
+
+# ── 5. Multi-Signal Stability Score Calculator ──────────────────────────
+# Stability = w_rec * Recognition + w_temp * Temporal + w_mot * Motion + w_pers * Persistence
+weight_recognition: 0.35
+weight_temporal: 0.25
+weight_motion: 0.20
+weight_persistence: 0.20
+stability_threshold: 0.85
+
+# ── 6. Micro-Adjustment & Jitter Filter ─────────────────────────────────
+tremor_speed_threshold: 0.18
+tremor_max_displacement: 0.020
+twitch_duration_ms: 70.0
+
+# ── 7. Pose Transition Detector ─────────────────────────────────────────
+transition_min_duration_ms: 60.0
+transition_max_duration_ms: 350.0
+
+# ── 8. Active Interaction State Locking ─────────────────────────────────
+lock_exit_threshold: 0.45
+active_preservation_frames: 6

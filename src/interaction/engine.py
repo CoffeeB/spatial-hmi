@@ -9,11 +9,12 @@ import numpy as np
 
 from src.gestures.gesture_types import GestureType, RecognizedGesture
 from src.gestures.heuristic_classifier import HeuristicGestureClassifier
-from src.intent.state_machine import IntentContext, InteractionStateMachine
+from src.intent.state_machine import IntentContext, InteractionStateMachine, InteractionState
 from src.interaction.coordinate_transform import CoordinateTransformer
-from src.interaction.mapping import InteractionMapper, SpatialCommand
+from src.interaction.mapping import InteractionMapper, SpatialCommand, SpatialCommandType
 from src.interaction.smoothing import OneEuroFilter
 from src.landmarks.hand_state import HandState
+from src.stability.stability_lifecycle import MovementCategory
 from src.utils.config_loader import HMIConfig
 from src.utils.logging_config import setup_logger
 
@@ -134,15 +135,22 @@ class InteractionEngine:
                     primary_hand, secondary_hand, rec1=single_gesture, rec2=secondary_gesture
                 )
 
-        # Active recognized gesture for FSM update
-        eval_gesture = bimanual_gesture if bimanual_gesture is not None else single_gesture
-
         # 2. Temporal Intent FSM Update
-        intent_ctx = self.fsm.update(
-            hand_detected=True,
-            recognized_gesture=eval_gesture,
-            timestamp=now,
-        )
+        # If primary hand already has a stabilized intent_context from TemporalIntentEngine and no bimanual gesture,
+        # use its stabilized intent_context directly and synchronize internal FSM state
+        if getattr(primary_hand, "intent_context", None) is not None and bimanual_gesture is None:
+            intent_ctx = primary_hand.intent_context
+            self.fsm.state = intent_ctx.state
+            self.fsm.active_gesture = intent_ctx.active_gesture
+            self.fsm.candidate_gesture = getattr(intent_ctx, "candidate_gesture", GestureType.NONE)
+            self.fsm.last_hand_seen_timestamp = now
+        else:
+            eval_gesture = bimanual_gesture if bimanual_gesture is not None else single_gesture
+            intent_ctx = self.fsm.update(
+                hand_detected=True,
+                recognized_gesture=eval_gesture,
+                timestamp=now,
+            )
 
         # 3. Coordinate Transformation & Spatial Smoothing
         focal_x = primary_hand.palm_center[0]
@@ -164,5 +172,31 @@ class InteractionEngine:
             timestamp=now,
             secondary_hand=secondary_hand,
         )
+
+        # 5. Stability Engine Command Gating & State Lock Preservation
+        # Commands are only eligible when Stability Score >= threshold and movement is INTENTIONAL.
+        # Micro-adjustments and transitions must NEVER produce commands.
+        # State Locking: Once an interaction becomes ACTIVE, preserve it against transient noise.
+        stab_ctx = getattr(primary_hand, "stability_context", None)
+        if stab_ctx is not None:
+            is_active_locked = getattr(stab_ctx, "is_state_locked", False)
+            is_eligible = getattr(stab_ctx, "is_command_eligible", True)
+            m_cat = getattr(stab_ctx, "movement_category", None)
+
+            # Passive / Non-action commands (HOVER, IDLE, RELEASE) do not trigger new state transitions
+            is_action_command = command.command_type not in (
+                SpatialCommandType.HOVER,
+                SpatialCommandType.IDLE,
+                SpatialCommandType.RELEASE_OBJECT,
+                SpatialCommandType.CANCEL_INTERACTION,
+            )
+
+            if is_action_command:
+                # If movement is MICRO_ADJUSTMENT or TRANSITION, or stability score is insufficient,
+                # suppress the command unless protected by active state lock
+                if (not is_eligible or m_cat in (MovementCategory.MICRO_ADJUSTMENT, MovementCategory.TRANSITION)) and not is_active_locked:
+                    fallback_type = SpatialCommandType.HOVER if intent_ctx.state != InteractionState.IDLE else SpatialCommandType.IDLE
+                    command.command_type = fallback_type
+                    command.interaction_state = "STABILITY_SUPPRESSED"
 
         return command, intent_ctx, primary_hand

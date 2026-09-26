@@ -46,6 +46,8 @@ class HandPoseId(str, Enum):
     H014_CUPPED = "H014_CUPPED"
     H015_KNIFE_EDGE = "H015_KNIFE_EDGE"
     H016_DOUBLE_POINT = "H016_DOUBLE_POINT"
+    H017_FOUR_FINGER_POINT = "H017_FOUR_FINGER_POINT"
+    H018_FIVE_FINGER_POINT = "H018_FIVE_FINGER_POINT"
     UNKNOWN = "UNKNOWN"
 
 
@@ -67,6 +69,8 @@ POSE_CANONICAL_NAMES: Dict[HandPoseId, str] = {
     HandPoseId.H014_CUPPED: "CUPPED_HAND",
     HandPoseId.H015_KNIFE_EDGE: "KNIFE_EDGE",
     HandPoseId.H016_DOUBLE_POINT: "DOUBLE_POINT",
+    HandPoseId.H017_FOUR_FINGER_POINT: "FOUR_FINGER",
+    HandPoseId.H018_FIVE_FINGER_POINT: "FIVE_FINGER",
     HandPoseId.UNKNOWN: "NONE",
 }
 
@@ -106,6 +110,29 @@ class FingerConfiguration:
     inner_hand_visible: bool = True
     palm_facing: str = "PALM"  # "PALM", "DORSAL", or "SIDE"
 
+    @property
+    def pointing_finger_count(self) -> int:
+        """Count of actively extended pointing digits (1 to 5)."""
+        count = 0
+        if self.index == FingerStateEnum.EXTENDED:
+            count += 1
+        if self.middle == FingerStateEnum.EXTENDED:
+            count += 1
+        if self.ring == FingerStateEnum.EXTENDED:
+            count += 1
+        if self.little == FingerStateEnum.EXTENDED:
+            count += 1
+
+        if count == 4 and self.thumb_is_extended:
+            return 5
+        if count == 4:
+            return 4
+        if count == 3:
+            return 3
+        if count == 2:
+            return 2
+        return max(1, count)
+
     def summary(self) -> str:
         """One-line concise topological signature."""
         view_tag = self.palm_facing.lower()
@@ -128,6 +155,36 @@ class DerivedHandPose:
     satisfied_predicates: List[str] = field(default_factory=list)
     unmet_predicates: List[str] = field(default_factory=list)
     diagnostics: List[str] = field(default_factory=list)
+    # Level 1 Intention Deciphering & Focal Digits
+    pose_intention: str = "OBSERVATION_NEUTRAL"
+    focal_digits: List[str] = field(default_factory=list)
+    intended_action: str = ""
+
+    def __post_init__(self):
+        if not self.intended_action or self.pose_intention == "OBSERVATION_NEUTRAL":
+            from src.intent.intention_decipherer import Level1PoseIntentionDecipherer
+            dec = Level1PoseIntentionDecipherer.decipher(self.canonical_name, self.focal_digits, self.confidence)
+            self.pose_intention = dec["pose_intention"]
+            self.intended_action = dec["intended_action"]
+            if not self.focal_digits:
+                self.focal_digits = dec["focal_digits"]
+
+    @property
+    def pointing_finger_count(self) -> int:
+        """Derives the exact pointing finger count (1 to 5) for multi-finger gestures."""
+        if self.pose_id == HandPoseId.H004_INDEX_POINT:
+            return 1
+        elif self.pose_id in (HandPoseId.H016_DOUBLE_POINT, HandPoseId.H009_PEACE):
+            return 2
+        elif self.pose_id == HandPoseId.H011_THREE_FINGER:
+            return 3
+        elif self.pose_id == HandPoseId.H017_FOUR_FINGER_POINT:
+            return 4
+        elif self.pose_id in (HandPoseId.H018_FIVE_FINGER_POINT, HandPoseId.H001_OPEN_PALM, HandPoseId.H002_OPEN_PALM_SPREAD):
+            return 5
+        if self.configuration is not None:
+            return self.configuration.pointing_finger_count
+        return 1
 
     def is_pose(self, pose_id: HandPoseId) -> bool:
         return self.pose_id == pose_id
@@ -565,6 +622,47 @@ class HandPoseClassifier:
                     "Digits abducted laterally with wide inter-digit separation",
                 ],
                 diagnostics=["Derived from maximal digit extension and lateral spread"],
+            )
+
+        # -------------------------------------------------------------------
+        # Rule 13b: H017 Four-Finger Point (Digits 2-5 extended, thumb folded/tucked)
+        # -------------------------------------------------------------------
+        if (
+            cfg.num_extended_fingers == 4
+            and not cfg.thumb_is_extended
+            and cfg.thumb in (FingerStateEnum.FOLDED, FingerStateEnum.TUCKED, FingerStateEnum.TOUCHING)
+        ):
+            return DerivedHandPose(
+                pose_id=HandPoseId.H017_FOUR_FINGER_POINT,
+                canonical_name=POSE_CANONICAL_NAMES[HandPoseId.H017_FOUR_FINGER_POINT],
+                confidence=0.92,
+                configuration=cfg,
+                satisfied_predicates=[
+                    "Index, Middle, Ring, Little all extended",
+                    f"Thumb folded or tucked across palm (state={cfg.thumb.value})",
+                ],
+                diagnostics=["Derived from 4-digit extension with thumb folded"],
+            )
+
+        # -------------------------------------------------------------------
+        # Rule 13c: H018 Five-Finger Point (All 5 digits extended tightly in pointing/knife formation)
+        # -------------------------------------------------------------------
+        if (
+            cfg.num_extended_fingers == 4
+            and cfg.thumb_is_extended
+            and (cfg.are_fingers_adducted or cfg.thumb_index_angle_deg < 35.0)
+            and not cfg.are_fingers_spread
+        ):
+            return DerivedHandPose(
+                pose_id=HandPoseId.H018_FIVE_FINGER_POINT,
+                canonical_name=POSE_CANONICAL_NAMES[HandPoseId.H018_FIVE_FINGER_POINT],
+                confidence=0.91,
+                configuration=cfg,
+                satisfied_predicates=[
+                    "All 5 digits extended forward",
+                    "Digits tightly adducted in coordinated pointing ray",
+                ],
+                diagnostics=["Derived from 5-digit coordinated forward extension"],
             )
 
         # -------------------------------------------------------------------

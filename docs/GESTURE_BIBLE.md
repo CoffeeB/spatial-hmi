@@ -444,6 +444,22 @@ Gestura utilizes the standard 21 3D hand landmarks:
 * **Confidence Requirements**: Confidence $\ge 0.55$.
 * **Failure Conditions**: Separation between index and middle digits.
 
+### H017 — Four-Finger Point
+* **Purpose**: 4-finger directional pointing, 4-finger gestures, viewport/workspace grouping.
+* **Finger Anatomy**: Digits 2–5 (Index, Middle, Ring, Little) fully extended (F001); Thumb folded or tucked across palm (F002/F004).
+* **Palm Orientation**: Coronal or lateral facing display.
+* **Recognition Rules**: 4 fingers extended with $R_{\text{ext}} \ge 1.25$; Thumb folded/tucked; not spread wide.
+* **Confidence Requirements**: Confidence $\ge 0.90$.
+* **Failure Conditions**: Thumb extends (transitions to H001 Open Palm or H018 Five-Finger Point).
+
+### H018 — Five-Finger Point (Knife Ray)
+* **Purpose**: Whole-hand precision directional pointing, coordinated 5-finger raycasting, directional sweeps.
+* **Finger Anatomy**: All 5 digits (Thumb + 4 fingers) fully extended (F001) and tightly adducted/parallel in pointing formation.
+* **Palm Orientation**: Coronal or knife-edge orientation.
+* **Recognition Rules**: All 5 digits extended with tight inter-digit alignment ($< 35^\circ$ thumb-index angle, fingers adducted, not spread).
+* **Confidence Requirements**: Confidence $\ge 0.90$.
+* **Failure Conditions**: Digits spread wide (transitions to H002 Open Palm Spread).
+
 ---
 
 # Part V: Level 2 — Motion Primitives (M001–M099)
@@ -570,21 +586,39 @@ Every gesture in this section complies strictly with the official Gestura Gestur
 
 ---
 
-## G001 — Swipe Left (Primary Slap)
+### Multi-Finger Interaction Hierarchy & Evolution
+
+Gestura evolves the foundational interaction groups (Point, Swipe, and Rotate) across the full multi-finger spectrum (1 to 5 digits), establishing semantic clarity and graduated interaction scopes:
+
+| Finger Count | Point Evolution (`G005`) | Swipe Evolution (`G001`–`G004`) | Rotate Evolution (`G018`–`G019`) | Scope / Semantic Meaning |
+| :--- | :--- | :--- | :--- | :--- |
+| **1 Finger** | `G005_1F_POINT` (Index Point) | `G001_1F`..`G004_1F` (1F Swipe) | `G018_1F` / `G019_1F` (1F Rotate) | Micro / Single-element precision |
+| **2 Fingers** | `G005_2F_POINT` (Double Point) | `G001_2F`..`G004_2F` (2F Swipe) | `G018_2F` / `G019_2F` (2F Rotate) | Local document / container scroll & 2D spin |
+| **3 Fingers** | `G005_3F_POINT` (Three-Finger Point) | `G001_3F`..`G004_3F` (3F Swipe) | `G018_3F` / `G019_3F` (3F Rotate) | Application / desktop switch & 3D camera orbit |
+| **4 Fingers** | `G005_4F_POINT` (Four-Finger Point) | `G001_4F`..`G004_4F` (4F Swipe) | `G018_4F` / `G019_4F` (4F Rotate) | Window manager / Stage Manager / viewport roll |
+| **5 Fingers / Hand** | `G005_5F_POINT` (Five-Finger Point) | `G001_5F`..`G004_5F` (5F / Palm Swipe) | `G018_5F` / `G019_5F` (5F / Hand Rotate) | Global desktop dismiss / world environment spin |
+
+---
+
+## G001 — Swipe Left (Multi-Finger Evolved: G001_1F through G001_5F)
 
 **Category**  
 Motion
 
 **Purpose**  
-Triggers rapid horizontal navigation to the next item, desktop, or carousel pane, or imparts an intensity-driven 360° counter-clockwise spin to the 3D globe.
+Triggers horizontal navigation to the next item, desktop, or pane, or imparts an intensity-driven counter-clockwise spin to the 3D globe.
+* `G001_1F_SWIPE_LEFT`: 1-Finger swipe left (carousel micro-step / tab advance).
+* `G001_2F_SWIPE_LEFT`: 2-Finger swipe left (page / document horizontal scrub).
+* `G001_3F_SWIPE_LEFT`: 3-Finger swipe left (virtual workspace / full app switch).
+* `G001_4F_SWIPE_LEFT`: 4-Finger swipe left (window grouping / Stage Manager cycle).
+* `G001_5F_SWIPE_LEFT` / `G001_PALM_SWIPE_LEFT`: 5-Finger or Hand swipe left (global dismiss / macro clear).
 
 **Finger Anatomy**  
-* Thumb: F001 (Extended) or F003 (Relaxed)
-* Index: F001 (Extended)
-* Middle: F001 (Extended)
-* Ring: F001 (Extended)
-* Little: F001 (Extended)  
-*Note: Hand must be open; digits may not be balled into a fist.*
+* 1F: Index extended (F001), other digits folded.
+* 2F: Index + Middle extended (F001), others folded.
+* 3F: Index + Middle + Ring extended (F001), others folded.
+* 4F: Digits 2–5 extended (F001), Thumb folded.
+* 5F: All 5 digits extended (F001, Open Palm or 5-Finger Point).
 
 **Palm Orientation**  
 Forward facing camera ($\mathbf{n}_{\text{palm}} \cdot \mathbf{v}_{\text{cam}} \le -0.45$).
@@ -734,20 +768,25 @@ To distinguish an intentional down-swipe from an arm drop, G004 requires an open
 
 ---
 
-## G005 — Point & Hover
+## G005 — Point & Hover (Multi-Finger Evolved: G005_1F through G005_5F)
 
 **Category**  
-Static
+Static / Targeting
 
 **Purpose**  
-Drives screen cursor with 1:1 fidelity and magnetically highlights target interactive 3D nodes without selection.
+Drives screen cursor with 1:1 fidelity and magnetically highlights target interactive 3D nodes without selection. Evolved across 1 to 5 pointing digits:
+* `G005_1F_POINT`: **One Finger Point** (Primary precision cursor ray, index extended, single node highlight).
+* `G005_2F_POINT`: **Two Fingers Point** (Dual-focus raycast, coordinate axis alignment, range brackets).
+* `G005_3F_POINT`: **Three Fingers Point** (Multi-target grouping selector raycast, cluster highlight).
+* `G005_4F_POINT`: **Four Fingers Point** (Workspace boundary selection ray, zone highlight).
+* `G005_5F_POINT`: **Five Fingers Point** (Whole-hand planar beam / knife ray, directional area cast).
 
 **Finger Anatomy**  
-* Thumb: F002 or F003 (Curled or relaxed against palm)
-* Index: F001 (Extended, $R_{\text{ext}} \ge 1.15$)
-* Middle: F002 (Curled, $R_{\text{ext}} \le 1.05$)
-* Ring: F002 (Curled, $R_{\text{ext}} \le 1.05$)
-* Little: F002 (Curled, $R_{\text{ext}} \le 1.05$)
+* **1 Finger (`G005_1F_POINT`)**: Index extended ($R_{\text{ext}} \ge 1.15$), Middle/Ring/Little curled ($R_{\text{ext}} \le 1.05$), Thumb folded or relaxed.
+* **2 Fingers (`G005_2F_POINT`)**: Index + Middle extended parallel ($< 6^\circ$ divergence), Ring/Little curled, Thumb folded.
+* **3 Fingers (`G005_3F_POINT`)**: Index + Middle + Ring extended, Little curled, Thumb folded.
+* **4 Fingers (`G005_4F_POINT`)**: Digits 2–5 extended, Thumb folded across palm (H017).
+* **5 Fingers (`G005_5F_POINT`)**: All 5 digits extended tightly in coordinated knife formation (H018).
 
 **Palm Orientation**  
 Facing screen or tilted inward up to 60° (natural pronation).
@@ -1227,22 +1266,31 @@ Flick gestures are differentiated from standard swipes by their high acceleratio
 
 ---
 
-## G018 — Axial Clockwise Dial
+## G018 & G019 — Axial Rotation & Dialing (Multi-Finger Evolved: G018_1F..5F CW & G019_1F..5F CCW)
 
 **Category**  
 Motion / Rotational
 
 **Purpose**  
-Incrementally increments continuous numerical parameters (audio volume, lighting intensity, time scrubbing).
+Incrementally adjusts continuous numerical parameters, rotational degrees of freedom, camera views, or whole-world orientations. Evolved across 1 to 5 rotating digits for Clockwise (`G018`) and Counter-Clockwise (`G019`):
+* `G018_1F_ROTATE_CW` / `G019_1F_ROTATE_CCW`: **1 Finger Rotate** (Single-finger fine dial / precision knob adjustment, e.g., audio volume, scrubber needle).
+* `G018_2F_ROTATE_CW` / `G019_2F_ROTATE_CCW`: **2 Fingers Rotate** (Two-finger in-plane object/canvas 2D spin).
+* `G018_3F_ROTATE_CW` / `G019_3F_ROTATE_CCW`: **3 Fingers Rotate** (Three-finger 3D camera orbit / scene gimbal roll).
+* `G018_4F_ROTATE_CW` / `G019_4F_ROTATE_CCW`: **4 Fingers Rotate** (Four-finger viewport reorientation / stage tilt).
+* `G018_5F_ROTATE_CW` / `G019_5F_ROTATE_CCW` (or `G018_CLOCKWISE_DIAL` / `G019_COUNTER_CLOCKWISE_DIAL`): **5 Fingers or Hand Rotate** (Full palm global environment / world coordinate spin).
 
 **Finger Anatomy**  
-* H004 Index Point or H005 Precision Pinch.
+* 1F: H004 Index Point.
+* 2F: H016 Double Point or H009 Peace.
+* 3F: H011 Three-Finger.
+* 4F: H017 Four-Finger Point.
+* 5F: H001 Open Palm, H002 Open Palm Spread, or H018 Five-Finger Point.
 
 **Palm Orientation**  
 Facing screen.
 
 **Motion**  
-M007 Circle Clockwise: Circular orbit around fixed center point.
+M007 Circle Clockwise (`CW`) or M008 Circle Counter-Clockwise (`CCW`): Circular orbit around fixed center point.
 
 **Recognition Criteria**  
 * Minimum confidence: 0.55
@@ -1799,6 +1847,177 @@ When vision and voice provide conflicting signals:
 1. **Safety Dominance**: Explicit voice commands (*"Stop"*, *"Cancel"*, *"Freeze"*) unconditionally override all vision tracking streams.
 2. **Spatial Dominance**: Vision coordinates unconditionally override spoken coordinates (spoken coordinates are inherently vague).
 3. **Temporal Windowing**: Spoken deictic pronouns ("this") are matched against the visual hover trajectory within a $[-300\,\text{ms}, +200\,\text{ms}]$ temporal coincidence window.
+
+---
+
+# Section XII: Temporal Intent Engine Architecture
+
+To eliminate conflicting transitions between finger states, hand poses, motion primitives, and gestures, Gestura mandates a **Temporal Intent Engine**. Under this model, the system **never reacts to a single frame**.
+
+```
+Camera Sensor (60Hz)
+        ↓
+Finger States (1–3 Frames: EMA smoothing & majority voting)
+        ↓
+Hand Pose (3–5 Frames: Enter/Exit hysteresis & anti-oscillation)
+        ↓
+Motion Primitives (5–10 Frames: Linearity & directional consistency)
+        ↓
+Gesture Candidates (8–15 Frames: Leaky evidence accumulator)
+        ↓
+Temporal Intent Engine (State Machine + Priority Manager + Intent Lock)
+        ↓
+Confirmed Gesture Dispatch
+```
+
+### 1. Intent State Machine Lifecycle
+Every gesture interaction must conform to the 6-state lifecycle:
+`IDLE` $\rightarrow$ `OBSERVING` $\rightarrow$ `CANDIDATE` $\rightarrow$ `CONFIRMED` $\rightarrow$ `ACTIVE` $\rightarrow$ `RELEASING` $\rightarrow$ `IDLE`.
+* `IDLE`: No hands detected or resting posture. Zero commands emitted.
+* `OBSERVING`: Hand entered volume; establishing baseline anatomical landmarks. Zero commands emitted.
+* `CANDIDATE`: Candidate gesture match accumulating temporal evidence. Zero commands emitted.
+* `CONFIRMED`: Evidence exceeds threshold $\tau_{\text{confirm}}$. Exactly one discrete interaction trigger dispatched.
+* `ACTIVE`: Continuous interaction sustained (Pinch drag, dial orbit, bimanual scale). Continuous spatial updates streamed.
+* `RELEASING`: Intent confidence decaying; graceful deceleration easing ($0.85^k$ per frame). Never snaps abruptly.
+
+### 2. Intent Lock & 5-Tier Priority Hierarchy
+While an interaction is in `ACTIVE` state:
+* **Intent Lock**: Exclusively locks interpretation to the active interaction family (`PINCH`, `BIMANUAL`, `DIAL`), suppressing secondary swipes, fists, and point hovers.
+* **Priority Hierarchy**:
+  1. **Tier 1 (Pinch Selection)**: Precision pinch and continuous node drag (Highest).
+  2. **Tier 2 (Two-Hand Manipulation)**: Bimanual scale, translation, and rotation.
+  3. **Tier 3 (Swipe Gestures)**: 1F to 5F directional strokes.
+  4. **Tier 4 (Point Hover)**: Raycast cursor targeting.
+  5. **Tier 5 (Idle)**: Neutral resting state (Lowest).
+
+---
+
+# Section XIII: Multi-Level Intention Deciphering Architecture
+
+In classic spatial gesture engines, systems evaluate geometric states (angles, positions, bounds) and jump directly to invoking commands. This naive approach suffers from the **Intent Gap**: *physical anatomy does not equal user purpose*. A user pointing their index finger may be actively targeting an in-air button, or they may simply be resting their forearm on a table. A user swiping their palm may be intentionally paging a carousel, or they may be dropping their fatigued arm back to their side.
+
+To eliminate ambiguity, Gestura mandates **Explicit Multi-Level Intention Deciphering** across every perceptual layer:
+
+```
+Level 0: Finger States     ➔ Micro-Intentions & Focal Digit Identification (Which digits matter?)
+        ↓
+Level 1: Hand Pose         ➔ Macro-Interaction Intent & Intended Action (What is the hand poised to do?)
+        ↓
+Level 2: Motion Primitives ➔ Kinetic Purposefulness & Drift Rejection (Is this stroke purposeful or accidental?)
+        ↓
+Level 3: Complete Gestures ➔ Task Intent Synthesis & Predictive Next-Intent (What is the user's high-level goal?)
+```
+
+Every level deciphers user intention within its temporal horizon and passes structured semantic metadata to the subsequent layer.
+
+---
+
+### 1. Level 0: Finger Intention Deciphering & Focal Salience
+
+Individual digits possess unique mechanical roles during an interaction. Level 0 deciphers the intention behind each of the 5 digits (Thumb, Index, Middle, Ring, Little) and determines **focal salience**:
+
+#### 1.1 Finger Intention Taxonomy
+| Finger Intention | Description | Typical Digit Assignment |
+| :--- | :--- | :--- |
+| `POINTING_TARGETING` | Extended to direct gaze, raycast, or aim cursor | Index (or Index+Middle) |
+| `CONTACT_OPPOSITION` | Opposing digit pad-to-pad for pinch, touch, or grip | Thumb + Index (or Middle) |
+| `SUPPORT_BASE` | Folded/curled into palm providing structural stabilization | Middle, Ring, Little (in Point) |
+| `DYNAMIC_TRIGGER` | Poised/hooked ready to tap, click, or pull trigger | Index tip |
+| `ISOLATED_EMPHASIS` | Lone extended digit expressing symbolic affirmation or call | Thumb (Thumbs-Up), Little (Shaka) |
+| `ABDUCTED_EXPANSION` | Splayed wide to indicate maximum boundary, scale, or reset | All 5 digits (Spread Hand) |
+| `PASSIVE_ADDUCTION` | Digits curled or extended in parallel without independent agency | Ring & Little (in Peace sign) |
+| `PASSIVE_RESTING` | Neutral relaxed resting state in anatomical equilibrium | Unengaged digits |
+
+#### 1.2 Focal Role Hierarchy & Focus Weights
+Every digit is assigned a `focal_role` and a continuous salience weight $w_{\text{focus}} \in [0.0, 1.0]$:
+1. **`PRIMARY_ACTOR`** ($w_{\text{focus}} \ge 0.90$): The primary driver of the current interaction. The visualizer anchors 3D cursor coordinates, raycasts, and magnetic targets strictly to this digit's tip or pad (e.g., Index tip during `POINT`, Thumb+Index midpoint during `PINCH`).
+2. **`SECONDARY_ACTOR`** ($0.60 \le w_{\text{focus}} < 0.90$): Co-acting digits in multi-finger pointing, peace selection, or spread hands.
+3. **`SUPPORT_BASE`** ($w_{\text{focus}} \le 0.10$): Digits curled or folded against the palm. These digits provide mechanical stabilization and clear the camera's line-of-sight; they are **actively ignored** as cursor targets to prevent jitter.
+4. **`PASSIVE_RESTING`** ($w_{\text{focus}} \approx 0.20$): Digits in unengaged neutral postures.
+
+---
+
+### 2. Level 1: Hand Pose Intention Deciphering
+
+Static hand poses (H001–H018) synthesize the 5 finger states into a unified macro-interaction intent:
+
+#### 2.1 Pose Intention Taxonomy
+| Pose Intention | Associated Poses | Intended Action | Focal Digits |
+| :--- | :--- | :--- | :--- |
+| `TARGETING_RAYCAST` | H004 (Point), H016 (Double Point), H017, H018 | Directing visual raycast or cursor targeting toward spatial coordinates | Index (or extended group) |
+| `SELECTION_PREPARATION` | H005 (Pinch), H006 (Lateral Pinch), H010 (OK-Ring) | Preparing to grasp, select, or click interactive spatial element | Thumb, Index |
+| `MANIPULATION_ENGAGED` | H003 (Closed Fist / Grab) | Maintaining continuous clutch/drag on acquired object | All 5 digits (fist) |
+| `SYSTEM_CONFIRMATION` | H007 (Thumbs Up) | Emitting affirmative system confirmation / committing dialog | Thumb |
+| `SYSTEM_DISMISSAL` | H008 (Thumbs Down) | Emitting dismiss command / rejecting proposal | Thumb |
+| `DELIMITER_RELEASE` | H001 (Open Palm) | Neutral resting observation or dropping active interaction | All 5 digits |
+| `OBSERVATION_NEUTRAL` | H002 (Spread Fingers) | Maximally expanding hand span / preparing bimanual scaling | All 5 digits |
+| `NUMERIC_INPUT` | H009 (Peace), H011 (Three Finger) | Binary/ternary count selection or modal trigger | Index, Middle (Ring) |
+| `WORKSPACE_PANNING` | H014 (Cupped), H015 (Knife Edge) | Scanning workspace plane or gathering spatial nodes | Planar digit sheet |
+| `COMMUNICATION_SIGN` | H012 (Shaka), H013 (Gun) | Triggering auxiliary menu or aiming crosshair | Thumb, Little / Thumb, Index |
+
+Every pose outputs an explicit `intended_action` string detailing the user's immediate operational goal.
+
+---
+
+### 3. Level 2: Motion Primitive Intention & Purposefulness
+
+Not all hand motion is intentional. Hand travel can arise from purposeful navigational strokes, or it can stem from accidental arm drops, postural fatigue drift, or wandering fidgets. Level 2 separates purposeful intent from accidental movement.
+
+#### 3.1 Kinetic Intentionality Score Formulation
+The intentionality score $S_{\text{intent}} \in [0.0, 1.0]$ is formulated across the observation window:
+$$S_{\text{intent}} = 0.30 \cdot \min\left(1.0, \frac{v_{\text{mean}}}{v_{\text{norm}}}\right) + 0.30 \cdot \min\left(1.0, \frac{\Delta x_{\text{net}}}{\Delta x_{\text{norm}}}\right) + 0.20 \cdot \mathcal{L} + 0.20 \cdot \mathcal{C}_{\text{dir}}$$
+Where:
+* $v_{\text{mean}}$: Window-smoothed tangential palm velocity.
+* $\Delta x_{\text{net}}$: Net displacement magnitude between stroke onset and current frame.
+* $\mathcal{L} = \frac{\|\mathbf{p}_{\text{end}} - \mathbf{p}_{\text{start}}\|}{\sum \|\Delta \mathbf{p}_i\|}$: Trajectory linearity ratio ($\mathcal{L} \approx 1.0$ for clean lines).
+* $\mathcal{C}_{\text{dir}} = \frac{1}{N-1} \sum \hat{\mathbf{v}}_i \cdot \hat{\mathbf{v}}_{i+1}$: Directional cosine consistency.
+
+#### 3.2 Motion Intention Classification
+* **`NAVIGATIONAL_STROKE`** ($S_{\text{intent}} \ge 0.65$, $is\_purposeful = \text{True}$): High-velocity, linear sweep intended to slide or paginate.
+* **`OBJECT_TRANSLATION`** ($S_{\text{intent}} \ge 0.50$, $is\_purposeful = \text{True}$): Controlled spatial displacement while holding an acquired node.
+* **`ROTATIONAL_DIAL`** ($is\_purposeful = \text{True}$): Circular orbital trajectory around a central axis for dial scrubbing or camera rotation.
+* **`APPROACH_ENGAGEMENT`** ($is\_purposeful = \text{True}$): Direct $+Z$ forward translation approaching interactive plane (in-air push).
+* **`RETREAT_DISENGAGEMENT`** ($is\_purposeful = \text{True}$): Direct $-Z$ backward withdrawal to disengage.
+* **`STATIONARY_INSPECTION`** ($is\_purposeful = \text{False}$): Low speed and minimal displacement; holding steady to inspect target.
+* **`ACCIDENTAL_REPOSITIONING`** ($S_{\text{intent}} < 0.45$ or curved wander, $is\_purposeful = \text{False}$): **Suppressed by engine**. No swipe, tap, or translation is permitted to trigger during accidental drift.
+
+---
+
+### 4. Level 3: Complete Task Intention & Sequential Prediction
+
+Level 3 synthesizes L0 focal digits, L1 pose intention, and L2 motion intention into high-level user task goals and predicts the user's anticipated follow-up action:
+
+#### 4.1 Task Intention Synthesis Matrix
+| L0 Focal Digits | L1 Pose Intent | L2 Motion Intent | Synthesized Task Intent | Predicted Next Intent |
+| :--- | :--- | :--- | :--- | :--- |
+| Thumb + Index | `SELECTION_PREPARATION` | `STATIONARY_INSPECTION` | `SELECT_NODE` | `DRAG_AND_DROP` |
+| Thumb + Index | `MANIPULATION_ENGAGED` | `OBJECT_TRANSLATION` | `DRAG_AND_DROP` | `RELEASE_AND_PLACE` |
+| 1F to 5F group | `WORKSPACE_PANNING` | `NAVIGATIONAL_STROKE` | `SWIPE_NAVIGATE` | `OBSERVATION_NEUTRAL` |
+| Index tip | `TARGETING_RAYCAST` | `APPROACH_ENGAGEMENT` | `AIR_TAP_TRIGGER` | `RETURN_TO_AIM` |
+| Thumb + Index | `SELECTION_PREPARATION` | `ROTATIONAL_DIAL` | `ORBIT_CAMERA` | `HOLD_PERSPECTIVE` |
+| Thumb | `SYSTEM_CONFIRMATION` | `STATIONARY_INSPECTION` | `CONFIRM_DECISION` | `DISMISS_VIEW` |
+| Thumb | `SYSTEM_DISMISSAL` | `STATIONARY_INSPECTION` | `DISMISS_VIEW` | `OBSERVATION_NEUTRAL` |
+| All 5 digits | `OBSERVATION_NEUTRAL` | `NAVIGATIONAL_STROKE` | `SCALE_WORKSPACE` | `STABILIZE_SCALE` |
+| Any | `OBSERVATION_NEUTRAL` | `STATIONARY_INSPECTION` | `PASSIVE_OBSERVE` | `ENGAGE_INTERACTION` |
+
+#### 4.2 Multi-Level Explainability Trace
+Every interaction event emitted by Gestura includes a human-readable and machine-parseable hierarchy trace:
+```text
+L0[Index] ➔ L1[TARGETING_RAYCAST] ➔ L2[APPROACH_ENGAGEMENT] ➔ L3[AIR_TAP_TRIGGER]
+```
+This guarantees 100% transparency for developer debugging, automated QA regression, and predictive latency compensation.
+
+---
+
+### 5. Mandatory Implementation Guidelines for Future Extensions
+
+All future contributors, classifier authors, and multimodal module designers MUST adhere to the following rules:
+
+1. **Rule of Micro-Intention (Level 0)**: Every newly added finger state must specify its `FingerIntention`, whether it can serve as a focal digit (`is_focal`), its focus weight range, and its `FocalRole`. Never output a finger state without focal semantics.
+2. **Rule of Intended Action (Level 1)**: Every new hand pose added to the Gesture Bible must declare its `PoseIntention` and provide an explicit `intended_action` string.
+3. **Rule of Drift Suppression (Level 2)**: Every dynamic gesture detector must consult `is_purposeful` and `intentionality_score` from `Level2MotionIntentionDecipherer`. Ballistic triggers must never fire if the motion is classified as `ACCIDENTAL_REPOSITIONING`.
+4. **Rule of Sequential Prediction (Level 3)**: Every composite gesture must define its anticipated `predicted_next_intent` to allow the graphics engine and pre-fetching subsystems to prepare next-step UI state smoothly.
+5. **Rule of Protocol Serialization**: All intention fields (`finger_intentions`, `focal_digits`, `pose_intention`, `motion_intention`, `task_intent`, `predicted_next_intent`) must be serialized into `HandTelemetry` and `TemporalIntentTelemetry` payloads without breaking backward compatibility.
 
 ---
 

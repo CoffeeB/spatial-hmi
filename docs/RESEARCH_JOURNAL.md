@@ -385,6 +385,39 @@ If a human holds their hand in front of a camera:
 
 ---
 
+### Entry 011 — 2026-09-25 | Advancing to Level 2: Motion Primitives — From Gesture Labels to a Temporal Kinematic Perception Engine
+* **Author:** Lead Architect
+* **Theme:** Pure Kinematics, Posture-Agnostic Movement, Temporal Trajectory Modeling
+* **Context:** Transitioning Gestura from a collection of static gesture labels to an explicit temporal perception system.
+
+#### The Paradigm Shift
+Until today, computer vision systems conflated *what the hand is shaped like* with *how the hand is moving*. A swipe was treated as a monolithic gesture; a wave was an ad-hoc state machine.
+
+We established the canonical separation of Level 2:
+> **Temporarily forget "gestures." Ask: How is the hand moving?**
+
+Movement is not a gesture; movement is a set of **measurable physical properties over time**:
+- **Trajectory**: Sliding temporal observation buffer $t_0 \to (x_0, y_0, z_0), t_1 \to (x_1, y_1, z_1), \dots, t_n \to (x_n, y_n, z_n)$.
+- **Velocity**: $\mathbf{v}(t) = \frac{d\mathbf{p}}{dt} = (v_x, v_y, v_z)$ and scalar speed $\|\mathbf{v}\|$.
+- **Acceleration**: $\mathbf{a}(t) = \frac{d\mathbf{v}}{dt}$ and tangential acceleration $a_{\parallel} = \frac{d\|\mathbf{v}\|}{dt}$ (`ACCELERATING`, `DECELERATING`, `STEADY`).
+- **Direction**: Unit vector $\hat{\mathbf{u}}$, Cartesian heading $\theta \in [-180^\circ, +180^\circ]$, cardinal labels (`LEFT`, `RIGHT`, `UP`, `DOWN`, `TOWARD`, `AWAY`).
+- **Distance**: Net displacement $\|\mathbf{d}\|$, total cumulative path length $L$, and linearity ratio $\kappa = \|\mathbf{d}\| / L$.
+- **Duration**: Active continuous stroke duration $\Delta t_{\text{stroke}}$ vs dwell stationarity duration $\Delta t_{\text{dwell}}$.
+- **Rotational Orbit**: Winding number $\Delta \Phi = \sum \Delta \phi_i$ around trajectory centroid detecting `ROTATE_CLOCKWISE` and `ROTATE_COUNTERCLOCKWISE`.
+- **Lifecycle**: `HOLD` (sustained dwell $> 400\,\text{ms}$) and `RELEASE` (abrupt deceleration from stroke).
+
+#### The Architecture
+1. **`MotionPrimitiveTracker`**: Evaluates per-hand temporal kinematics over a rolling window.
+2. **`MotionState`**: Rich dataclass attached to `HandState` and streamed via `HandTelemetry`.
+3. **Composability**: Level 3 gestures can now be expressed as elegant functional compositions:
+   $$\text{Complete Gesture} = \text{Hand Pose (Level 1)} \otimes \text{Motion Primitive (Level 2)}$$
+   For example:
+   - $\text{Open Palm} \otimes \text{Move Left} = \text{Swipe Left Slap}$
+   - $\text{Index Point} \otimes \text{Move Up} = \text{Pointing Drag Up}$
+   - $\text{Closed Fist} \otimes \text{Rotate CW} = \text{Crank Clockwise}$
+
+---
+
 ## 3. Open Research Questions & Future Horizons
 
 ```
@@ -406,3 +439,116 @@ Rapid micro-pinches suffer from motion blur at 30 FPS. We are researching a ligh
 
 ### Research Frontier 3: Multimodal Context Arbitration
 When a user says *"Focus on this"* while pointing at an ambiguous cluster of three nodes, how should audio attention weight spatial confidence? We are formalizing an Energy-Based Model (EBM) that minimizes joint intent error across vocal prosody, gaze direction, and pointing ray cones.
+
+---
+
+## [Entry 012] — 2026-09-25: Dual-Hand Independent Kinematics & Identity Decoupling
+**Status**: Implemented & Verified  
+**Commit/Phase**: Level 2 Motion Primitives (`M001–M099`)  
+**Objective**: Ensure that multiple hands in view have their temporal trajectories, velocities, accelerations, dynamic states, and motion primitives tracked with 100% physical independence and zero crosstalk.
+
+### 1. The Multi-Hand Identity Swapping Defect
+In monocular hand detectors (MediaPipe Hands), detected hands are returned as an unordered list based on regional detection confidence or bounding-box scanning order:
+$$\mathbf{H}_{\text{detected}} = [h_0, h_1]$$
+Between frame $t_k$ and frame $t_{k+1}$, the order of detected hands can spontaneously invert:
+$$\text{Frame } t_k: [h_0 = \text{Left}, h_1 = \text{Right}] \quad \longrightarrow \quad \text{Frame } t_{k+1}: [h_0 = \text{Right}, h_1 = \text{Left}]$$
+When tracking engines key state buffers by loop index `hand_idx`, the tracker at index $0$ abruptly jumps from Left hand coordinates $(x_L, y_L)$ to Right hand coordinates $(x_R, y_R)$. This produces a massive spurious velocity spike ($\|\mathbf{v}\| > 50\,\text{units/s}$), breaks linearity ($\kappa \to 0$), and injects false circular orbital winding ($\Delta \Phi$).
+
+### 2. Anatomical Identity Resolution Architecture
+Gestura now decouples hand tracking from detector array indices by assigning stable anatomical identifiers based on handedness and spatial disambiguation:
+$$\text{ID}(h) = \begin{cases} 0 & \text{if } h.\text{handedness} = \text{"Left"} \\ 1 & \text{if } h.\text{handedness} = \text{"Right"} \end{cases}$$
+For rare detector false positives with duplicate labels (e.g. two Right hands), a greedy spatial assignment resolves unique stable keys.
+
+### 3. Dual-Hand Real-Time Visualization
+To guarantee transparent observation:
+1. **Dual Motion Panels**: The visualizer HUD displays dedicated, side-by-side cells for **LEFT HAND** (cyan `#00f0ff`) and **RIGHT HAND** (emerald `#10b981`), reporting individual speed ($u/s$), acceleration ($u/s^2$), direction, linearity, and duration simultaneously at 60 FPS.
+2. **On-Canvas Floating HUD & Velocity Vectors**: Each hand renders a floating motion badge at the wrist and an instantaneous velocity vector arrow radiating from palm center along $(v_x, v_y)$, confirming independent directional tracking in real-time space.
+
+---
+
+## [Entry 013] — 2026-09-25: Articulated Finger Motion Primitives & Dorsal Inclusion Kinematics
+**Status**: Implemented & Verified  
+**Commit/Phase**: Level 2 Motion Primitives (`FINGER_MOTION` & `DORSAL_INCLUSION`)  
+**Objective**: Extend temporal motion primitives from whole-hand translation down to individual finger articulation (extension, flexion, tapping, swiping, hold) and integrate dorsal (back-of-hand) kinematic inclusion and axial hand flips.
+
+### 1. Relative vs Absolute Finger Velocity: The Articulation Problem
+Translating the entire hand moves all five fingertips at high spatial velocity. If fingertip motion is measured in global sensor coordinates $\mathbf{x}_{\text{tip}}$, moving the hand rightward at $0.5\,\text{units/s}$ would erroneously classify every finger as actively "swiping".
+To isolate pure articulation, Gestura subtracts the palm center velocity $\mathbf{v}_{\text{palm}}$ from each fingertip's velocity $\mathbf{v}_{\text{tip}}$:
+$$\mathbf{v}_{\text{rel}} = \mathbf{v}_{\text{tip}} - \mathbf{v}_{\text{palm}}$$
+Now, when the hand moves through space without moving its fingers, $\|\mathbf{v}_{\text{rel}}\| \approx 0.0$ (`STATIONARY`). When a finger curls or extends independently, $\|\mathbf{v}_{\text{rel}}\|$ accurately measures its local physical excursion.
+
+### 2. Finger Extension Dynamics & Discrete Primitives
+We track the rate of change of each finger's normalized extension ratio $R_{\text{ext}}$:
+$$\dot{e}_i = \frac{d(R_{\text{ext}, i})}{dt}$$
+This yields intuitive, measurable finger primitives:
+- `EXTENDING`: $\dot{e} > +0.20\,\text{s}^{-1}$ (digit actively uncurling / straightening)
+- `FLEXING`: $\dot{e} < -0.20\,\text{s}^{-1}$ (digit actively curling into palm)
+- `TAPPING`: Rapid downward strike ($v_{y, \text{tip}} > 0.15$) followed by an immediate deceleration and recovery within a $350\,\text{ms}$ temporal window.
+- `SWIPING`: High lateral relative velocity $\|\mathbf{v}_{\text{rel}}\| > 0.18$ with low extension change $|\dot{e}| \le 0.15$.
+- `HOLD`: Digit maintained in fixed extension for $> 400\,\text{ms}$.
+- `STATIONARY`: Sub-threshold movement ($\|\mathbf{v}_{\text{rel}}\| < 0.08$).
+
+### 3. Dorsal Kinematic Inclusion & Axial Flips
+Hands operate in full $3D$ space. Gestura explicitly integrates dorsal presentation into the kinematic state:
+1. **Palm vs Dorsal Facing State**: The surface facing the camera is tracked via the 3D palm normal vector $\mathbf{n}_{\text{palm}}$, setting `is_dorsal = True` and `palm_facing = "DORSAL"` when $\mathbf{n}_{\text{palm}, z} \ge 0.10$.
+2. **Axial Hand Flips as High-Level Primitives**: Turning the hand over is an essential gesture primitive (pronation / supination). By calculating longitudinal roll rate:
+   $$\dot{\phi}_{\text{roll}} = \frac{d(\text{roll})}{dt}$$
+   When $|\dot{\phi}_{\text{roll}}| \ge 60^\circ/\text{s}$ and the hand transitions between `PALM` and `DORSAL`, the motion tracker emits high-level flip primitives:
+   - `FLIP_TO_DORSAL` (Pronation flip)
+   - `FLIP_TO_PALM` (Supination flip)
+
+### 4. Interactive Telemetry & Dashboard Integration
+- **Digit Cards**: All 5 cards display a live `.finger-motion-pill` showing direction and rate (`↗ EXTENDING +0.45`, `↘ FLEXING -0.38`, `⚡ TAPPING`, `⏸ HOLD`, `⏹ STILL`).
+- **Dual Motion Cards**: Display real-time `#dorsal-tag-left` and `#dorsal-tag-right` badges (`PALM` / `DORSAL`) and flash `FLIP ➜ DORSAL` or `FLIP ➜ PALM`.
+- **Canvas Skeleton**: Amber knuckle arch and `• DORSAL` tag when viewed dorsally, plus pulsating color halos on active fingertips.
+
+---
+
+## [Entry 014] — 2026-09-25: Level 3 Complete Gestures — Verifiable Temporal Event Sequences
+**Status**: Implemented & Verified  
+**Commit/Phase**: Level 3 Complete Gestures (`COMPLETE_GESTURES`)  
+**Objective**: Synthesize Level 1 Static Hand Poses and Level 2 Motion Primitives into verifiable temporal event sequences rather than single-frame snapshot labels.
+
+### 1. The Fallacy of the Snapshot Classifier
+In conventional gesture recognition, systems ask:
+> *"Does this single camera frame look like a pinch?"*
+
+This leads to catastrophic instability. A user momentarily touching their fingers while resting their hand or reaching for an object is misclassified as an intentional action.
+Gestura formalizes gestures as **sequential state machines** where an action is only recognized when a precise chain of physical events occurs in order over time:
+
+#### A. Point while Swipe Left (`G001P_POINT_SWIPE_LEFT`)
+Instead of a generic motion blur:
+1. **Pose Configuration**: Index extended, other fingers folded into palm (`POINT` or `DOUBLE_POINT`).
+2. **Kinematic Stroke Initiation**: Hand undergoes rapid leftward motion ($v_x < -0.18\,\text{m/s}$).
+3. **Displacement Gating**: Total displacement exceeds stroke distance threshold ($d \ge 0.045\,\text{screen units}$).
+4. **Directional Consistency**: Linearity ratio $\|\mathbf{d}\| / L \ge 0.65$ with horizontal dominance ($|d_x| \ge 1.35 |d_y|$).
+5. **Event Chain**: `PREPARE` ➔ `STROKE` ➔ `COMPLETED`.
+
+#### B. Precision Pinch (`G006_PINCH_SELECT` & `G007_PINCH_DRAG`)
+Instead of an instantaneous proximity check:
+1. **Approach Phase (`APPROACH`)**: Thumb and index fingertips actively move toward one another ($v_{\text{rel}} < 0$, distance decreasing from $0.40 d_{\text{ref}}$ toward contact).
+2. **Contact Phase (`CONTACT`)**: Fingertip Euclidean distance drops below contact threshold ($d \le 0.32 d_{\text{ref}}$).
+3. **Hold Phase (`HOLD`)**: Contact sustained with hand stationary ($\|\mathbf{v}\| \le 0.20\,\text{m/s}$) for $\ge 120\,\text{ms}$, emitting `G006_PINCH_SELECT`.
+4. **Drag Phase (`DRAG`)**: When the hand translates through space while maintaining contact, the gesture transitions into `G007_PINCH_DRAG`, preserving continuous spatial manipulation.
+5. **Release Phase (`RELEASE`)**: Fingertips separate ($d > 0.42 d_{\text{ref}}$), cleanly terminating selection.
+6. **Event Chain**: `APPROACH` ➔ `CONTACT` ➔ `HOLD` ➔ `DRAG` ➔ `RELEASE`.
+
+#### C. Air Tap Click (`G011_AIR_TAP`)
+1. **Aim Phase (`AIM`)**: Hand in `POINT` posture hovering steadily in front of target.
+2. **Strike Phase (`STRIKE`)**: Index finger tip accelerates downward/forward ($v_{y, \text{rel}} > 0.14$).
+3. **Bottom-Out Phase (`BOTTOM_OUT`)**: Tip reaches peak excursion and velocity reverses ($\dot{y} \le 0$).
+4. **Rebound Phase (`REBOUND`)**: Digit rapidly recoils back to baseline within $280\,\text{ms}$, emitting a discrete `CLICK` event.
+5. **Event Chain**: `AIM` ➔ `STRIKE` ➔ `BOTTOM_OUT` ➔ `REBOUND`.
+
+### 2. Priority Synthesis Architecture
+The `CompleteGestureRecognizer` evaluates competitive candidates with strict precedence:
+$$\text{Axial Flips (G020/G021)} \succ \text{Pinch Sequences (G006/G007)} \succ \text{Swipe Strokes (G001/G001P)} \succ \text{Air Tap (G011)} \succ \text{Hold Poses (G005/G013-G016)}$$
+This guarantees that intentional multi-phase interactions are never clobbered by resting posture classifications.
+
+### 3. Transparent Visualization & Empirical Telemetry
+- **Visualizer Hero Banner**: A glowing `complete-gesture-hero-card` showcases gesture name, G-code badge, category, active phase, and live kinematic metrics (displacement, speed, duration).
+- **Event Sequence Breadcrumbs**: Dynamic breadcrumbs (e.g. `<span class="seq-step-item">APPROACH</span> ➔ <span class="seq-step-item">CONTACT</span> ➔ <span class="seq-step-item active">HOLD</span>`) render the exact progression of physical events in real time.
+- **On-Canvas Skeleton Overlay**: Renders a floating secondary Level 3 pill at the wrist and a celebratory radial ripple pulse when a stroke completes.
+
+
+

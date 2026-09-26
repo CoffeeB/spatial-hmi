@@ -48,6 +48,12 @@
 
     <!-- Laboratory Control Actions -->
     <div class="header-actions">
+      <button id="toggle-stability-panel-btn" class="action-btn active" title="Toggle Developer Stability Engine Panel">
+        <span>STABILITY ENGINE</span>
+      </button>
+      <button id="toggle-temporal-overlay-btn" class="action-btn" title="Toggle Temporal Intent HUD">
+        <span>TEMPORAL INTENT HUD</span>
+      </button>
       <button id="toggle-axes-btn" class="action-btn active" title="Toggle 3D Coordinate Frame Axes">
         <span>3D LOCAL FRAME</span>
       </button>
@@ -86,10 +92,355 @@
         </div>
         <img id="camera-screen-feed" class="camera-screen-feed" alt="Live Hand Sensor Stream" />
         <canvas id="hand-skeleton-canvas" class="hand-skeleton-canvas"></canvas>
+
+        <!-- DEVELOPER DEBUG OVERLAY: STABILITY ENGINE -->
+        <div id="stability-engine-overlay" class="stability-engine-overlay">
+          <div class="overlay-header">
+            <div class="overlay-title-group">
+              <span class="overlay-live-dot stability-dot"></span>
+              <span class="overlay-title">STABILITY ENGINE</span>
+              <span id="stab-category-pill" class="intent-state-pill stab-intentional">INTENTIONAL</span>
+              <span id="stab-lock-pill" class="intent-lock-pill unlocked">UNLOCKED</span>
+              <span id="stab-eligible-pill" class="intent-state-pill stab-eligible">ELIGIBLE</span>
+            </div>
+            <div class="overlay-perf-group">
+              <span class="overlay-perf-label">SCORE:</span>
+              <span id="stab-score-header" class="overlay-perf-val highlight-val">0.95</span>
+              <span id="stab-latency-val" class="overlay-perf-val">0.8ms</span>
+              <button id="close-stability-btn" class="overlay-close-btn" title="Toggle Compact Mode">─</button>
+            </div>
+          </div>
+
+          <div class="overlay-layers-grid stability-grid" id="stability-layers-body">
+            <!-- 1. FINGER LAYER (State, Stability, Confidence, Age) -->
+            <div class="overlay-layer-card" id="stab-finger-card">
+              <div class="overlay-layer-head">
+                <span class="layer-num">FL</span>
+                <span class="layer-name">FINGERS (3F)</span>
+                <span id="stab-finger-status" class="layer-status-pill stable">STABLE</span>
+              </div>
+              <div class="stability-finger-list">
+                <div class="sf-row" id="sf-row-thumb">
+                  <span class="sf-name">THUMB</span>
+                  <span id="sf-thumb-state" class="sf-badge state-badge">EXT</span>
+                  <span class="sf-meta">Stab: <strong id="sf-thumb-stab">0.95</strong></span>
+                  <span class="sf-meta">Conf: <strong id="sf-thumb-conf">0.96</strong></span>
+                  <span class="sf-meta">Age: <strong id="sf-thumb-age">12f</strong></span>
+                </div>
+                <div class="sf-row" id="sf-row-index">
+                  <span class="sf-name">INDEX</span>
+                  <span id="sf-index-state" class="sf-badge state-badge">EXT</span>
+                  <span class="sf-meta">Stab: <strong id="sf-index-stab">0.98</strong></span>
+                  <span class="sf-meta">Conf: <strong id="sf-index-conf">0.99</strong></span>
+                  <span class="sf-meta">Age: <strong id="sf-index-age">24f</strong></span>
+                </div>
+                <div class="sf-row" id="sf-row-middle">
+                  <span class="sf-name">MIDDLE</span>
+                  <span id="sf-middle-state" class="sf-badge state-badge">EXT</span>
+                  <span class="sf-meta">Stab: <strong id="sf-middle-stab">0.94</strong></span>
+                  <span class="sf-meta">Conf: <strong id="sf-middle-conf">0.95</strong></span>
+                  <span class="sf-meta">Age: <strong id="sf-middle-age">18f</strong></span>
+                </div>
+                <div class="sf-row" id="sf-row-ring">
+                  <span class="sf-name">RING</span>
+                  <span id="sf-ring-state" class="sf-badge state-badge">EXT</span>
+                  <span class="sf-meta">Stab: <strong id="sf-ring-stab">0.92</strong></span>
+                  <span class="sf-meta">Conf: <strong id="sf-ring-conf">0.93</strong></span>
+                  <span class="sf-meta">Age: <strong id="sf-ring-age">15f</strong></span>
+                </div>
+                <div class="sf-row" id="sf-row-little">
+                  <span class="sf-name">LITTLE</span>
+                  <span id="sf-little-state" class="sf-badge state-badge">EXT</span>
+                  <span class="sf-meta">Stab: <strong id="sf-little-stab">0.90</strong></span>
+                  <span class="sf-meta">Conf: <strong id="sf-little-conf">0.91</strong></span>
+                  <span class="sf-meta">Age: <strong id="sf-little-age">10f</strong></span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 2. POSE LAYER (Pose, Observation Timer, Stability Score, Hysteresis) -->
+            <div class="overlay-layer-card" id="stab-pose-card">
+              <div class="overlay-layer-head">
+                <span class="layer-num">PL</span>
+                <span class="layer-name">POSE (5F)</span>
+                <span id="stab-pose-status" class="layer-status-pill confirmed">STABLE</span>
+              </div>
+              <div class="overlay-hero-val">
+                <span id="sp-pose-name" class="op-pose-title">NONE</span>
+                <span id="sp-pose-score" class="op-pose-score">0.00</span>
+              </div>
+              <div class="overlay-subline">
+                <span>Obs Timer: <strong id="sp-obs-timer">0ms</strong></span>
+                <span>Age: <strong id="sp-pose-age">0f</strong></span>
+              </div>
+              <div class="overlay-subline hysteresis-row">
+                <span>Enter: <strong id="sp-enter-th">0.88</strong></span>
+                <span>Exit: <strong id="sp-exit-th">0.62</strong></span>
+              </div>
+            </div>
+
+            <!-- 3. MOTION LAYER (Velocity, Direction, Dead-Zone Indicator, Displacement) -->
+            <div class="overlay-layer-card" id="stab-motion-card">
+              <div class="overlay-layer-head">
+                <span class="layer-num">ML</span>
+                <span class="layer-name">MOTION (8F)</span>
+                <span id="stab-deadzone-badge" class="layer-status-pill deadzone-in">DEAD ZONE</span>
+              </div>
+              <div class="overlay-metrics-quad">
+                <div class="om-stat"><span class="om-lbl">VEL</span><strong id="sm-vel">0.00</strong></div>
+                <div class="om-stat"><span class="om-lbl">DISP</span><strong id="sm-disp">0.00</strong></div>
+                <div class="om-stat"><span class="om-lbl">RADIUS</span><strong id="sm-radius">18px</strong></div>
+                <div class="om-stat"><span class="om-lbl">RAMP</span><strong id="sm-ramp">0.00</strong></div>
+              </div>
+              <div class="overlay-subline">
+                <span>Dir: <strong id="sm-dir">STATIONARY</strong></span>
+                <span>Status: <strong id="sm-status">DEAD ZONE</strong></span>
+              </div>
+            </div>
+
+            <!-- 4. STABILITY LAYER (Micro-adjustment, Transition, Stable, Locked, Windows) -->
+            <div class="overlay-layer-card" id="stab-lifecycle-card">
+              <div class="overlay-layer-head">
+                <span class="layer-num">SL</span>
+                <span class="layer-name">LIFECYCLE</span>
+                <span id="stab-lifecycle-badge" class="layer-status-pill stable">INTENTIONAL</span>
+              </div>
+              <div class="stability-pills-row">
+                <span id="pill-micro" class="stab-indicator-pill">MICRO</span>
+                <span id="pill-trans" class="stab-indicator-pill">TRANSITION</span>
+                <span id="pill-stable" class="stab-indicator-pill active-pill">STABLE</span>
+                <span id="pill-locked" class="stab-indicator-pill">LOCKED</span>
+              </div>
+              <div class="overlay-subline window-metrics">
+                <span>Windows: <strong id="sl-windows">F:3 P:5 M:8 G:12 2H:16</strong></span>
+              </div>
+              <div class="overlay-subline">
+                <span>Trans: <strong id="sl-trans-info">STABLE (0%)</strong></span>
+                <span>Hold: <strong id="sl-hold-info">0ms / 0ms</strong></span>
+              </div>
+            </div>
+
+            <!-- 5. INTENT LAYER (Candidate, Confirmed, Stability Score, Eligibility) -->
+            <div class="overlay-layer-card" id="stab-intent-card">
+              <div class="overlay-layer-head">
+                <span class="layer-num">IL</span>
+                <span class="layer-name">INTENT (12F)</span>
+                <span id="stab-eligibility-badge" class="layer-status-pill confirmed">ELIGIBLE</span>
+              </div>
+              <div class="overlay-hero-val">
+                <span id="si-confirmed-gesture" class="oi-gesture-title">NONE</span>
+                <span id="si-stability-score" class="oi-evidence-val">0.00</span>
+              </div>
+              <div class="overlay-subline">
+                <span>Cand: <strong id="si-candidate-gesture">NONE</strong></span>
+                <span>Thresh: <strong id="si-threshold">0.90</strong></span>
+              </div>
+              <div class="overlay-subline formula-row">
+                <span>Score: <strong id="si-formula-breakdown">0.35R + 0.25T + 0.20M + 0.20P</strong></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- REJECTION EXPLAINABILITY STRIP: Explains WHY a gesture was rejected -->
+          <div class="overlay-explain-row stability-rejection-strip">
+            <span class="explain-label">STATUS / REJECTION:</span>
+            <span id="stability-explain-text" class="explain-text">Evaluating hand stability. Deliberate, stable human intent required for commands.</span>
+          </div>
+        </div>
+
+        <!-- DEVELOPER DEBUG OVERLAY: TEMPORAL INTENT ENGINE -->
+        <div id="temporal-intent-overlay" class="temporal-intent-overlay hidden">
+          <div class="overlay-header">
+            <div class="overlay-title-group">
+              <span class="overlay-live-dot"></span>
+              <span class="overlay-title">TEMPORAL INTENT ENGINE</span>
+              <span id="intent-fsm-pill" class="intent-state-pill state-idle">IDLE</span>
+              <span id="intent-lock-pill" class="intent-lock-pill unlocked">UNLOCKED</span>
+            </div>
+            <div class="overlay-perf-group">
+              <span id="overlay-perf-fps" class="overlay-perf-val">60 FPS</span>
+              <span id="overlay-perf-lat" class="overlay-perf-val">1.2ms</span>
+              <button id="close-overlay-btn" class="overlay-close-btn" title="Toggle Compact Mode">─</button>
+            </div>
+          </div>
+
+          <div class="overlay-layers-grid" id="overlay-layers-body">
+            <!-- 1. FINGER LAYER (1-3 Frames) -->
+            <div class="overlay-layer-card" id="overlay-finger-card">
+              <div class="overlay-layer-head">
+                <span class="layer-num">L0</span>
+                <span class="layer-name">FINGERS (1–3F)</span>
+                <span id="overlay-finger-status" class="layer-status-pill stable">STABLE</span>
+              </div>
+              <div class="overlay-finger-states">
+                <div class="of-digit"><span class="of-name">T</span><span id="of-thumb" class="of-val">--</span></div>
+                <div class="of-digit"><span class="of-name">I</span><span id="of-index" class="of-val">--</span></div>
+                <div class="of-digit"><span class="of-name">M</span><span id="of-middle" class="of-val">--</span></div>
+                <div class="of-digit"><span class="of-name">R</span><span id="of-ring" class="of-val">--</span></div>
+                <div class="of-digit"><span class="of-name">L</span><span id="of-little" class="of-val">--</span></div>
+              </div>
+              <div class="overlay-subline">
+                <span>Confidence: <strong id="of-conf">0.00</strong></span>
+                <span>Jitter: <strong id="of-jitter">0.001</strong></span>
+              </div>
+            </div>
+
+            <!-- 2. POSE LAYER (3-5 Frames Hysteresis) -->
+            <div class="overlay-layer-card" id="overlay-pose-card">
+              <div class="overlay-layer-head">
+                <span class="layer-num">L1</span>
+                <span class="layer-name">POSE (3–5F)</span>
+                <span id="overlay-pose-status" class="layer-status-pill confirmed">CONFIRMED</span>
+              </div>
+              <div class="overlay-hero-val">
+                <span id="op-pose-name" class="op-pose-title">NONE</span>
+                <span id="op-pose-conf" class="op-pose-score">0.00</span>
+              </div>
+              <div class="overlay-subline">
+                <span>Candidate: <strong id="op-candidate">NONE</strong></span>
+                <span>Frames: <strong id="op-frames">0/5</strong></span>
+              </div>
+            </div>
+
+            <!-- 3. MOTION LAYER (5-10 Frames) -->
+            <div class="overlay-layer-card" id="overlay-motion-card">
+              <div class="overlay-layer-head">
+                <span class="layer-num">L2</span>
+                <span class="layer-name">MOTION (5–10F)</span>
+                <span id="overlay-motion-status" class="layer-status-pill moving">STILL</span>
+              </div>
+              <div class="overlay-metrics-quad">
+                <div class="om-stat"><span class="om-lbl">SPD</span><strong id="om-speed">0.00</strong></div>
+                <div class="om-stat"><span class="om-lbl">DISP</span><strong id="om-disp">0.00</strong></div>
+                <div class="om-stat"><span class="om-lbl">LIN</span><strong id="om-lin">1.00</strong></div>
+                <div class="om-stat"><span class="om-lbl">CONS</span><strong id="om-cons">1.00</strong></div>
+              </div>
+              <div class="overlay-subline">
+                <span>Dir: <strong id="om-dir">STILL</strong></span>
+                <span>Dur: <strong id="om-dur">0ms</strong></span>
+              </div>
+            </div>
+
+            <!-- 4. INTENT LAYER (8-15 Frames & Priority) -->
+            <div class="overlay-layer-card" id="overlay-intent-card">
+              <div class="overlay-layer-head">
+                <span class="layer-num">L3-5</span>
+                <span class="layer-name">INTENT & LOCK</span>
+                <span id="overlay-priority-badge" class="layer-status-pill priority">TIER 5</span>
+              </div>
+              <div class="overlay-hero-val">
+                <span id="oi-gesture-name" class="oi-gesture-title">NONE</span>
+                <span id="oi-evidence-score" class="oi-evidence-val">0.00</span>
+              </div>
+              <div class="overlay-subline">
+                <span>Lock: <strong id="oi-lock-status">UNLOCKED</strong></span>
+                <span>Easing: <strong id="oi-easing-val">1.00</strong></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 5. REAL-TIME EXPLAINABILITY REASONING STRIP -->
+          <div class="overlay-explain-row">
+            <span class="explain-label">EVIDENCE:</span>
+            <span id="overlay-explain-text" class="explain-text">Collecting evidence. System requires temporal consensus before confirming action.</span>
+          </div>
+        </div>
+
         <div id="sensor-placeholder" class="sensor-placeholder">
           <div class="placeholder-spinner"></div>
           <p>Waiting for Camera Feed from HMI Server...</p>
           <span class="placeholder-hint">Start server: PYTHONPATH=. ./.venv/bin/python scripts/run_hmi_server.py</span>
+        </div>
+      </div>
+
+      <!-- LEVEL 2 MOTION PRIMITIVES: DUAL HAND SEPARATE TRACKING STRIP -->
+      <div class="motion-primitives-strip dual-motion-grid">
+        <!-- LEFT HAND MOTION CELL -->
+        <div id="motion-card-left" class="motion-hand-cell hand-left-theme awaiting">
+          <div class="motion-header-row">
+            <div class="motion-hand-tag">
+              <span class="hand-side-dot left-dot"></span>
+              <span class="hand-side-name">LEFT HAND</span>
+              <span id="dorsal-tag-left" class="dorsal-pill">PALM</span>
+              <span class="l2-sub">L2 MOTION</span>
+            </div>
+            <div style="display: flex; gap: 6px; align-items: center;">
+              <span id="motion-intent-left" class="motion-intent-pill" style="font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(59, 130, 246, 0.15); color: #93c5fd; border: 1px solid #3b82f6;">STATIC</span>
+              <span id="motion-dyn-pill-left" class="motion-dyn-pill">AWAITING</span>
+            </div>
+          </div>
+          <div class="motion-main-row">
+            <div class="motion-token-group">
+              <span id="motion-icon-left" class="motion-icon">⏹</span>
+              <span id="motion-token-left" class="motion-token">--</span>
+            </div>
+            <div class="motion-stats-compact">
+              <div class="m-stat-mini">
+                <span class="m-lbl-mini">SPEED</span>
+                <span id="motion-speed-left" class="m-val-mini">-- <small>u/s</small></span>
+              </div>
+              <div class="m-stat-mini">
+                <span class="m-lbl-mini">ACCEL</span>
+                <span id="motion-accel-left" class="m-val-mini">-- <small>u/s²</small></span>
+              </div>
+              <div class="m-stat-mini">
+                <span class="m-lbl-mini">DIR</span>
+                <span id="motion-dir-left" class="m-val-mini">--</span>
+              </div>
+              <div class="m-stat-mini">
+                <span class="m-lbl-mini">LIN</span>
+                <span id="motion-lin-left" class="m-val-mini">--</span>
+              </div>
+              <div class="m-stat-mini">
+                <span class="m-lbl-mini">DUR</span>
+                <span id="motion-dur-left" class="m-val-mini">-- <small>ms</small></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- RIGHT HAND MOTION CELL -->
+        <div id="motion-card-right" class="motion-hand-cell hand-right-theme awaiting">
+          <div class="motion-header-row">
+            <div class="motion-hand-tag">
+              <span class="hand-side-dot right-dot"></span>
+              <span class="hand-side-name">RIGHT HAND</span>
+              <span id="dorsal-tag-right" class="dorsal-pill">PALM</span>
+              <span class="l2-sub">L2 MOTION</span>
+            </div>
+            <div style="display: flex; gap: 6px; align-items: center;">
+              <span id="motion-intent-right" class="motion-intent-pill" style="font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(59, 130, 246, 0.15); color: #93c5fd; border: 1px solid #3b82f6;">STATIC</span>
+              <span id="motion-dyn-pill-right" class="motion-dyn-pill">AWAITING</span>
+            </div>
+          </div>
+          <div class="motion-main-row">
+            <div class="motion-token-group">
+              <span id="motion-icon-right" class="motion-icon">⏹</span>
+              <span id="motion-token-right" class="motion-token">--</span>
+            </div>
+            <div class="motion-stats-compact">
+              <div class="m-stat-mini">
+                <span class="m-lbl-mini">SPEED</span>
+                <span id="motion-speed-right" class="m-val-mini">-- <small>u/s</small></span>
+              </div>
+              <div class="m-stat-mini">
+                <span class="m-lbl-mini">ACCEL</span>
+                <span id="motion-accel-right" class="m-val-mini">-- <small>u/s²</small></span>
+              </div>
+              <div class="m-stat-mini">
+                <span class="m-lbl-mini">DIR</span>
+                <span id="motion-dir-right" class="m-val-mini">--</span>
+              </div>
+              <div class="m-stat-mini">
+                <span class="m-lbl-mini">LIN</span>
+                <span id="motion-lin-right" class="m-val-mini">--</span>
+              </div>
+              <div class="m-stat-mini">
+                <span class="m-lbl-mini">DUR</span>
+                <span id="motion-dur-right" class="m-val-mini">-- <small>ms</small></span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -114,8 +465,54 @@
       </div>
     </section>
 
-    <!-- RIGHT PANEL: Level 1 Defined Hand Pose & Level 0 Individual Digits -->
+    <!-- RIGHT PANEL: Level 3 Complete Gesture, Level 1 Defined Hand Pose & Level 0 Digits -->
     <section class="viewport-panel state-panel">
+      <!-- LEVEL 3 COMPLETE GESTURE HERO CARD: POSE + MOTION EVENT SEQUENCES -->
+      <div id="complete-gesture-card" class="complete-gesture-hero-card awaiting">
+        <div class="cg-primary-row">
+          <div class="cg-info-col">
+            <div class="cg-head-row">
+              <span class="cg-tier-badge">L3 COMPLETE GESTURE</span>
+              <span id="cg-gesture-id" class="cg-id-badge">NONE</span>
+              <span id="cg-phase-badge" class="cg-phase-pill">IDLE</span>
+              <span id="cg-conf-badge" class="cg-conf-badge">CONF: 0.00</span>
+            </div>
+            <div class="cg-name-row">
+              <span id="cg-gesture-name" class="cg-name-text">AWAITING GESTURE</span>
+              <span id="cg-category-badge" class="cg-cat-pill">COMPOSITE</span>
+            </div>
+          </div>
+          <div class="cg-metrics-col">
+            <div class="cg-metric-item">
+              <span class="cg-m-lbl">DISPLACEMENT</span>
+              <span id="cg-metric-disp" class="cg-m-val">--</span>
+            </div>
+            <div class="cg-metric-item">
+              <span class="cg-m-lbl">SPEED</span>
+              <span id="cg-metric-speed" class="cg-m-val">--</span>
+            </div>
+            <div class="cg-metric-item">
+              <span class="cg-m-lbl">DURATION</span>
+              <span id="cg-metric-dur" class="cg-m-val">--</span>
+            </div>
+          </div>
+        </div>
+        <!-- Temporal Event Sequence Chain (e.g. APPROACH ➔ CONTACT ➔ HOLD) -->
+        <div class="cg-sequence-row">
+          <span class="cg-seq-label">EVENT SEQUENCE:</span>
+          <div id="cg-event-chain" class="cg-event-chain">
+            <span class="seq-step-item active">OBSERVING</span>
+          </div>
+        </div>
+        <!-- Level 3 Task Intent & Next Intent Row -->
+        <div class="cg-intent-row" style="display: flex; gap: 8px; margin-top: 6px; font-size: 11px; align-items: center; padding: 4px 8px; background: rgba(15, 23, 42, 0.4); border-radius: 6px;">
+          <span style="color: #38bdf8; font-weight: 700; letter-spacing: 0.5px;">TASK INTENT:</span>
+          <span id="cg-task-intent" class="intent-tag" style="background: rgba(56, 189, 248, 0.15); border: 1px solid #38bdf8; padding: 1px 6px; border-radius: 4px; color: #e0f2fe; font-weight: 600;">IDLE_MONITORING</span>
+          <span style="color: #64748b; margin-left: 8px;">NEXT:</span>
+          <span id="cg-next-intent" style="color: #94a3b8; font-weight: 600;">NONE</span>
+        </div>
+      </div>
+
       <!-- COMPACT WRAPPED LEVEL 1 DEFINED POSE & TOPOLOGY STRIP -->
       <div class="wrapped-topology-card">
         <div class="topo-pose-col">
@@ -127,6 +524,12 @@
           <div class="topo-pose-main">
             <span id="hero-pose-name" class="topo-pose-title">NONE</span>
             <span id="hero-pose-desc" class="topo-pose-desc">Awaiting hand observation...</span>
+          </div>
+          <!-- Level 1 Pose Intention Row -->
+          <div class="topo-intent-row" style="display: flex; gap: 6px; align-items: center; margin-top: 4px; font-size: 11px;">
+            <span style="color: #c084fc; font-weight: 700; letter-spacing: 0.5px;">POSE INTENT:</span>
+            <span id="hero-pose-intent" class="intent-tag" style="background: rgba(192, 132, 252, 0.15); border: 1px solid #c084fc; padding: 1px 6px; border-radius: 4px; color: #f3e8ff; font-weight: 600;">RESTING_PALM</span>
+            <span id="hero-intended-action" style="color: #94a3b8; font-size: 10px; font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 240px;"></span>
           </div>
         </div>
         <div class="topo-derivation-col">
@@ -169,7 +572,12 @@
               <span class="digit-badge">1</span>
               <h2 class="digit-name">THUMB</h2>
             </div>
-            <div class="state-pill state-uncertain" id="pill-thumb">UNCERTAIN</div>
+            <div class="card-head-badges">
+              <span class="focal-pill" id="focal-pill-thumb" style="display: none; background: rgba(56, 189, 248, 0.2); border: 1px solid #38bdf8; color: #38bdf8; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px;">🎯 FOCAL</span>
+              <span class="digit-intent-pill" id="intent-pill-thumb" style="display: none; background: rgba(168, 85, 247, 0.2); border: 1px solid #a855f7; color: #e9d5ff; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px;">INTENT</span>
+              <span class="finger-motion-pill" id="motion-pill-thumb">⏹ STILL</span>
+              <div class="state-pill state-uncertain" id="pill-thumb">UNCERTAIN</div>
+            </div>
           </div>
           <div class="metrics-row">
             <div class="ext-gauge">
@@ -197,7 +605,12 @@
               <span class="digit-badge">2</span>
               <h2 class="digit-name">INDEX</h2>
             </div>
-            <div class="state-pill state-uncertain" id="pill-index">UNCERTAIN</div>
+            <div class="card-head-badges">
+              <span class="focal-pill" id="focal-pill-index" style="display: none; background: rgba(56, 189, 248, 0.2); border: 1px solid #38bdf8; color: #38bdf8; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px;">🎯 FOCAL</span>
+              <span class="digit-intent-pill" id="intent-pill-index" style="display: none; background: rgba(168, 85, 247, 0.2); border: 1px solid #a855f7; color: #e9d5ff; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px;">INTENT</span>
+              <span class="finger-motion-pill" id="motion-pill-index">⏹ STILL</span>
+              <div class="state-pill state-uncertain" id="pill-index">UNCERTAIN</div>
+            </div>
           </div>
           <div class="metrics-row">
             <div class="ext-gauge">
@@ -226,7 +639,12 @@
               <span class="digit-badge">3</span>
               <h2 class="digit-name">MIDDLE</h2>
             </div>
-            <div class="state-pill state-uncertain" id="pill-middle">UNCERTAIN</div>
+            <div class="card-head-badges">
+              <span class="focal-pill" id="focal-pill-middle" style="display: none; background: rgba(56, 189, 248, 0.2); border: 1px solid #38bdf8; color: #38bdf8; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px;">🎯 FOCAL</span>
+              <span class="digit-intent-pill" id="intent-pill-middle" style="display: none; background: rgba(168, 85, 247, 0.2); border: 1px solid #a855f7; color: #e9d5ff; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px;">INTENT</span>
+              <span class="finger-motion-pill" id="motion-pill-middle">⏹ STILL</span>
+              <div class="state-pill state-uncertain" id="pill-middle">UNCERTAIN</div>
+            </div>
           </div>
           <div class="metrics-row">
             <div class="ext-gauge">
@@ -255,7 +673,12 @@
               <span class="digit-badge">4</span>
               <h2 class="digit-name">RING</h2>
             </div>
-            <div class="state-pill state-uncertain" id="pill-ring">UNCERTAIN</div>
+            <div class="card-head-badges">
+              <span class="focal-pill" id="focal-pill-ring" style="display: none; background: rgba(56, 189, 248, 0.2); border: 1px solid #38bdf8; color: #38bdf8; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px;">🎯 FOCAL</span>
+              <span class="digit-intent-pill" id="intent-pill-ring" style="display: none; background: rgba(168, 85, 247, 0.2); border: 1px solid #a855f7; color: #e9d5ff; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px;">INTENT</span>
+              <span class="finger-motion-pill" id="motion-pill-ring">⏹ STILL</span>
+              <div class="state-pill state-uncertain" id="pill-ring">UNCERTAIN</div>
+            </div>
           </div>
           <div class="metrics-row">
             <div class="ext-gauge">
@@ -284,7 +707,12 @@
               <span class="digit-badge">5</span>
               <h2 class="digit-name">LITTLE</h2>
             </div>
-            <div class="state-pill state-uncertain" id="pill-little">UNCERTAIN</div>
+            <div class="card-head-badges">
+              <span class="focal-pill" id="focal-pill-little" style="display: none; background: rgba(56, 189, 248, 0.2); border: 1px solid #38bdf8; color: #38bdf8; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px;">🎯 FOCAL</span>
+              <span class="digit-intent-pill" id="intent-pill-little" style="display: none; background: rgba(168, 85, 247, 0.2); border: 1px solid #a855f7; color: #e9d5ff; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px;">INTENT</span>
+              <span class="finger-motion-pill" id="motion-pill-little">⏹ STILL</span>
+              <div class="state-pill state-uncertain" id="pill-little">UNCERTAIN</div>
+            </div>
           </div>
           <div class="metrics-row">
             <div class="ext-gauge">

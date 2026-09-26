@@ -27,6 +27,7 @@ from collections import deque
 from typing import Deque, Dict, List, Optional, Tuple
 import numpy as np
 
+from src.gestures.complete_gesture import CompleteGestureId
 from src.gestures.confidence_estimator import ConfidenceEstimator
 from src.gestures.gesture_types import GestureType, RecognizedGesture
 from src.gestures.hand_pose import HandPoseClassifier, HandPoseId, POSE_CANONICAL_NAMES
@@ -406,6 +407,29 @@ class HeuristicGestureClassifier:
 
         # ── 7. TEMPORAL SLAP / SWIPE DETECTION ────────────────────────────
         swipe_gesture, swipe_conf, slap_meta = self.slap_detector.process(hand, is_modifier=is_modifier)
+
+        # ── 7.5. LEVEL 3 COMPLETE GESTURE INTEGRATION ──────────────────────
+        cg = getattr(hand, "complete_gesture", None)
+        if cg is not None and cg.is_active:
+            cg_id = cg.gesture_id
+            if cg_id in (CompleteGestureId.G001_PALM_SWIPE_LEFT, CompleteGestureId.G001P_POINT_SWIPE_LEFT):
+                swipe_gesture = GestureType.SWIPE_LEFT
+                swipe_conf = max(swipe_conf, cg.confidence)
+            elif cg_id in (CompleteGestureId.G002_PALM_SWIPE_RIGHT, CompleteGestureId.G002P_POINT_SWIPE_RIGHT):
+                swipe_gesture = GestureType.SWIPE_RIGHT
+                swipe_conf = max(swipe_conf, cg.confidence)
+            elif cg_id in (CompleteGestureId.G003_PALM_SWIPE_UP, CompleteGestureId.G003P_POINT_SWIPE_UP):
+                swipe_gesture = GestureType.SWIPE_UP
+                swipe_conf = max(swipe_conf, cg.confidence)
+            elif cg_id in (CompleteGestureId.G004_PALM_SWIPE_DOWN, CompleteGestureId.G004P_POINT_SWIPE_DOWN):
+                swipe_gesture = GestureType.SWIPE_DOWN
+                swipe_conf = max(swipe_conf, cg.confidence)
+            elif cg_id in (CompleteGestureId.G006_PINCH_SELECT, CompleteGestureId.G007_PINCH_DRAG):
+                pinch_conf = max(pinch_conf, cg.confidence)
+            elif cg_id in (CompleteGestureId.G005_POINT_HOVER, CompleteGestureId.G011_AIR_TAP):
+                point_conf = max(point_conf, cg.confidence)
+            elif cg_id == CompleteGestureId.G008_FIST_GRAB:
+                grab_conf = max(grab_conf, cg.confidence)
 
         # ── 8. Raw scores map & EMA smoothing ──────────────────────────────
         raw_scores: Dict[GestureType, float] = {
