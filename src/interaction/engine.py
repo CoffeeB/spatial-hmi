@@ -13,6 +13,7 @@ from src.intent.state_machine import IntentContext, InteractionStateMachine, Int
 from src.interaction.coordinate_transform import CoordinateTransformer
 from src.interaction.mapping import InteractionMapper, SpatialCommand, SpatialCommandType
 from src.interaction.smoothing import OneEuroFilter
+from src.landmarks.finger_state import FingerStateEnum
 from src.landmarks.hand_state import HandState
 from src.stability.stability_lifecycle import MovementCategory
 from src.utils.config_loader import HMIConfig
@@ -136,6 +137,8 @@ class InteractionEngine:
                 )
 
         # 2. Temporal Intent FSM Update
+        eval_gesture = bimanual_gesture if bimanual_gesture is not None else single_gesture
+
         # If primary hand already has a stabilized intent_context from TemporalIntentEngine and no bimanual gesture,
         # use its stabilized intent_context directly and synchronize internal FSM state
         if getattr(primary_hand, "intent_context", None) is not None and bimanual_gesture is None:
@@ -145,7 +148,6 @@ class InteractionEngine:
             self.fsm.candidate_gesture = getattr(intent_ctx, "candidate_gesture", GestureType.NONE)
             self.fsm.last_hand_seen_timestamp = now
         else:
-            eval_gesture = bimanual_gesture if bimanual_gesture is not None else single_gesture
             intent_ctx = self.fsm.update(
                 hand_detected=True,
                 recognized_gesture=eval_gesture,
@@ -153,8 +155,19 @@ class InteractionEngine:
             )
 
         # 3. Coordinate Transformation & Spatial Smoothing
+        # When pointing at screen/camera, track the Index Fingertip (landmark 8) for accurate targeting and height
         focal_x = primary_hand.palm_center[0]
         focal_y = primary_hand.palm_center[1]
+
+        finger_states_obj = getattr(primary_hand, "finger_states", None)
+        is_pointing = (
+            eval_gesture.gesture == GestureType.POINT
+            or (finger_states_obj is not None and getattr(finger_states_obj.index, "state", None) == FingerStateEnum.EXTENDED)
+        )
+        if is_pointing and len(primary_hand.landmarks) > 8:
+            # Index tip landmark (index 8)
+            focal_x = primary_hand.landmarks[8].x
+            focal_y = primary_hand.landmarks[8].y
 
         # Convert normalized camera coords [0, 1] to NDC [-1, 1]
         raw_ndc_x, raw_ndc_y = self.transformer.normalized_to_ndc(focal_x, focal_y)

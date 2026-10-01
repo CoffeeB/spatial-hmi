@@ -38,17 +38,17 @@ class HandDetector:
 
     # ── Ghost Buffer Constants ────────────────────────────────────────────────
     # How many consecutive lost-detection frames to replay last-known landmarks.
-    # Camera-facing (end-on) orientations cause MediaPipe to miss 3-12 frames;
-    # 8 frames at 30 fps = ~267 ms of bridging — enough to survive most transients.
-    _GHOST_MAX_FRAMES: int = 8
+    # Camera-facing (end-on) orientations cause MediaPipe to miss frames;
+    # 18 frames at 30 fps = ~600 ms of bridging — enough to survive orientation transitions.
+    _GHOST_MAX_FRAMES: int = 18
     # Confidence applied to ghost frames decays linearly from this starting value.
-    _GHOST_BASE_CONFIDENCE: float = 0.45
+    _GHOST_BASE_CONFIDENCE: float = 0.55
 
     def __init__(
         self,
         max_num_hands: int = 2,
-        min_detection_confidence: float = 0.40,
-        min_tracking_confidence: float = 0.38,
+        min_detection_confidence: float = 0.25,
+        min_tracking_confidence: float = 0.25,
         model_complexity: int = 1,
     ):
         self.max_num_hands = max_num_hands
@@ -82,40 +82,84 @@ class HandDetector:
 
         # ── Temporal Ghost Buffer ──────────────────────────────────────────────
         # Keyed by hand_id (0=Left, 1=Right).
-        # Stores the last known raw landmarks and handedness so we can replay
-        # them when MediaPipe loses the hand during camera-facing orientation.
+        # Stores the last known raw landmarks, handedness, and velocity so we can replay
+        # and extrapolate them when MediaPipe loses the hand during camera-facing orientation.
         self._ghost_landmarks: Dict[int, np.ndarray] = {}   # hand_id -> (21, 3)
         self._ghost_handedness: Dict[int, str] = {}          # hand_id -> "Left"|"Right"
         self._ghost_frames_remaining: Dict[int, int] = {}    # hand_id -> frames left
+        self._ghost_velocity: Dict[int, np.ndarray] = {}     # hand_id -> (21, 3) velocity
 
-        # CLAHE for adaptive contrast enhancement (helps MediaPipe find
-        # end-on / camera-facing hands whose silhouette has low contrast).
-        self._clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        # Precompute Gamma LUTs for adaptive low-light illumination enhancement (gamma < 1.0 lifts shadows)
+        self._gamma_luts: Dict[int, np.ndarray] = {}
+        for g_val in [35, 40, 50, 60, 70, 80, 90, 100]:
+            gamma = g_val / 100.0
+            table = np.array([((i / 255.0) ** gamma) * 255 for i in range(256)]).astype(np.uint8)
+            self._gamma_luts[g_val] = table
 
-        logger.info("MediaPipe HandDetector initialized with Spatial Perception, Stability Engine, and TemporalIntentEngine.")
+        # CLAHE for adaptive contrast enhancement
+        self._clahe_standard = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
+        self._clahe_lowlight = cv2.createCLAHE(clipLimit=4.5, tileGridSize=(8, 8))
+
+        logger.info("MediaPipe HandDetector initialized with Adaptive Low-Light & Foreshortened Camera-Facing Perception.")
 
     def notify_interaction_state(self, hand_id: int, is_active: bool) -> None:
         """Notifies perception of downstream active interaction status for state locking."""
         self._active_interactions[hand_id] = is_active
 
-    def _enhance_for_detection(self, frame_bgr: np.ndarray) -> np.ndarray:
+    def _enhance_for_detection(self, frame_bgr: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """
-        Applies adaptive histogram equalization (CLAHE) on the luminance channel
-        before feeding frames to MediaPipe. This enhances skin-edge contrast for
-        camera-facing (end-on) hands whose silhouette is otherwise washed out.
-        Returns an RGB frame ready for MediaPipe.
+        Applies adaptive illumination normalization and contrast equalization.
+        - In low light / dark rooms: applies gamma expansion + dynamic CLAHE + subtle denoising.
+        - In standard lighting: applies standard CLAHE on luminance.
+        Returns:
+            primary_rgb: Primary preprocessed RGB frame for MediaPipe
+            boosted_rgb: Secondary high-contrast fallback RGB frame for hard camera-facing detection
         """
-        # Convert BGR -> YCrCb, apply CLAHE only on Y (luma), convert back
+        # Convert BGR -> YCrCb
         ycrcb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2YCrCb)
-        ycrcb[:, :, 0] = self._clahe.apply(ycrcb[:, :, 0])
-        enhanced_bgr = cv2.cvtColor(ycrcb, cv2.COLOR_YCrCb2BGR)
-        return cv2.cvtColor(enhanced_bgr, cv2.COLOR_BGR2RGB)
+        y_channel = ycrcb[:, :, 0]
+        mean_lum = float(np.mean(y_channel))
+
+        if mean_lum < 95.0:
+            # Low-illumination condition: lift shadows using adaptive gamma LUT
+            lut_key = int(round(np.clip(mean_lum / 100.0 * 100.0, 40, 100) / 10.0) * 10)
+            lut = self._gamma_luts.get(lut_key, self._gamma_luts[60])
+            y_gamma = cv2.LUT(y_channel, lut)
+            y_enhanced = self._clahe_lowlight.apply(y_gamma)
+            
+            # Subtle Gaussian blur on Y to suppress sensor grain/noise in dark conditions
+            y_enhanced = cv2.GaussianBlur(y_enhanced, (3, 3), 0)
+            ycrcb[:, :, 0] = y_enhanced
+            primary_bgr = cv2.cvtColor(ycrcb, cv2.COLOR_YCrCb2BGR)
+            primary_rgb = cv2.cvtColor(primary_bgr, cv2.COLOR_BGR2RGB)
+
+            # Secondary pass: Boosted contrast with edge sharpening for camera-facing fingers
+            y_sharp = cv2.addWeighted(y_enhanced, 1.35, cv2.GaussianBlur(y_enhanced, (0, 0), 3), -0.35, 0)
+            ycrcb_boost = ycrcb.copy()
+            ycrcb_boost[:, :, 0] = y_sharp
+            boosted_bgr = cv2.cvtColor(ycrcb_boost, cv2.COLOR_YCrCb2BGR)
+            boosted_rgb = cv2.cvtColor(boosted_bgr, cv2.COLOR_BGR2RGB)
+        else:
+            # Standard illumination
+            ycrcb[:, :, 0] = self._clahe_standard.apply(y_channel)
+            primary_bgr = cv2.cvtColor(ycrcb, cv2.COLOR_YCrCb2BGR)
+            primary_rgb = cv2.cvtColor(primary_bgr, cv2.COLOR_BGR2RGB)
+
+            # Secondary pass with enhanced edge contrast for camera-facing silhouette
+            y_boost = self._clahe_lowlight.apply(y_channel)
+            ycrcb_boost = ycrcb.copy()
+            ycrcb_boost[:, :, 0] = y_boost
+            boosted_bgr = cv2.cvtColor(ycrcb_boost, cv2.COLOR_YCrCb2BGR)
+            boosted_rgb = cv2.cvtColor(boosted_bgr, cv2.COLOR_BGR2RGB)
+
+        return primary_rgb, boosted_rgb
 
     def process_frame(
         self, frame_bgr: np.ndarray, timestamp: Optional[float] = None
     ) -> Tuple[List[HandState], np.ndarray]:
         """
-        Extracts 21 3D landmarks for all hands in the frame.
+        Extracts 21 3D landmarks for all hands in the frame with dual-pass low-light and
+        camera-facing foreshortening resilience.
         Returns:
             hand_states: List of structured HandState instances
             annotated_frame: Copy of frame with landmarks drawn for debug mode
@@ -124,19 +168,26 @@ class HandDetector:
         annotated_frame = frame_bgr.copy()
         h, w, _ = frame_bgr.shape
 
-        # Apply CLAHE contrast enhancement then convert to RGB for MediaPipe
-        frame_rgb = self._enhance_for_detection(frame_bgr)
-        frame_rgb.flags.writeable = False
-        results = self.hands_detector.process(frame_rgb)
-        frame_rgb.flags.writeable = True
+        # Dual-pass illumination and contrast preprocessing
+        primary_rgb, boosted_rgb = self._enhance_for_detection(frame_bgr)
+        primary_rgb.flags.writeable = False
+        results = self.hands_detector.process(primary_rgb)
+        primary_rgb.flags.writeable = True
+
+        # Secondary pass: if primary pass misses hands (e.g. low light or camera-facing end-on fingers),
+        # re-evaluate on the boosted contrast / edge-enhanced representation
+        if not results.multi_hand_landmarks:
+            boosted_rgb.flags.writeable = False
+            results = self.hands_detector.process(boosted_rgb)
+            boosted_rgb.flags.writeable = True
 
         hand_states: List[HandState] = []
 
         if not results.multi_hand_landmarks:
-            # ── Temporal Ghost Buffer: replay last-known landmarks ────────────
-            # When MediaPipe loses the hand (e.g. camera-facing orientation),
-            # we hold the last detected landmarks for up to _GHOST_MAX_FRAMES
-            # frames, feeding them through the full pipeline at decayed confidence.
+            # ── Temporal Ghost Buffer: replay & extrapolate last-known landmarks ────────────
+            # When MediaPipe temporarily loses the hand (e.g. camera-facing point hold),
+            # we hold and kinematically predict the last detected landmarks for up to _GHOST_MAX_FRAMES
+            # frames, feeding them through the full pipeline with smooth confidence decay.
             ghost_states, ghost_annotated = self._process_ghost_frames(frame_bgr, now)
             if ghost_states:
                 return ghost_states, ghost_annotated
@@ -145,6 +196,7 @@ class HandDetector:
             self._ghost_landmarks.clear()
             self._ghost_handedness.clear()
             self._ghost_frames_remaining.clear()
+            self._ghost_velocity.clear()
             self.spatial_engine.prune_missing_hands([])
             self.motion_tracker.prune_missing_hands(set())
             self.kinematics.reset_hand_tracking(0)
@@ -227,6 +279,17 @@ class HandDetector:
 
         # Seed ghost buffer with current live detections for next-frame bridging
         for state in hand_states:
+            prev_raw = self._ghost_landmarks.get(state.hand_id)
+            if prev_raw is not None:
+                vel = state.raw_landmarks_array - prev_raw
+                # Clamp velocity to prevent runaway ghost drift
+                vel_norm = np.linalg.norm(vel, axis=-1, keepdims=True)
+                max_step = 0.03
+                vel = np.where(vel_norm > max_step, vel * (max_step / (vel_norm + 1e-6)), vel)
+                self._ghost_velocity[state.hand_id] = vel
+            else:
+                self._ghost_velocity[state.hand_id] = np.zeros_like(state.raw_landmarks_array)
+
             self._ghost_landmarks[state.hand_id] = state.raw_landmarks_array.copy()
             self._ghost_handedness[state.hand_id] = state.handedness
             self._ghost_frames_remaining[state.hand_id] = self._GHOST_MAX_FRAMES
@@ -237,9 +300,8 @@ class HandDetector:
         self, frame_bgr: np.ndarray, now: float
     ) -> Tuple[List[HandState], np.ndarray]:
         """
-        Replays last-known landmarks through the full pipeline for any hand_id
-        that still has ghost frames remaining. Confidence is linearly decayed
-        to signal downstream components that this is estimated, not measured data.
+        Replays and kinematically extrapolates last-known landmarks through the full pipeline
+        for any hand_id that still has ghost frames remaining. Confidence is smoothly decayed.
 
         This bridges orientation-transition gaps where MediaPipe's palm detector
         temporarily loses the hand (e.g. fingers pointing toward camera).
@@ -254,6 +316,7 @@ class HandDetector:
                 # Ghost expired — remove from buffer
                 self._ghost_landmarks.pop(hand_id, None)
                 self._ghost_handedness.pop(hand_id, None)
+                self._ghost_velocity.pop(hand_id, None)
                 del self._ghost_frames_remaining[hand_id]
                 continue
 
@@ -262,9 +325,14 @@ class HandDetector:
             if raw_pts is None:
                 continue
 
-            # Decay confidence linearly: full at frame 8, near-zero at frame 1
-            decay = remaining / self._GHOST_MAX_FRAMES
+            # Decay confidence linearly: full at start, gentle taper toward zero
+            decay = remaining / float(self._GHOST_MAX_FRAMES)
             ghost_conf = self._GHOST_BASE_CONFIDENCE * decay
+
+            # Kinematic inertia extrapolation: gently advance position along last velocity
+            vel = self._ghost_velocity.get(hand_id, np.zeros_like(raw_pts))
+            extrapolated_pts = raw_pts + (vel * decay * 0.40)
+            self._ghost_landmarks[hand_id] = extrapolated_pts.copy()
 
             self._ghost_frames_remaining[hand_id] = remaining - 1
             active_ghost_ids.add(hand_id)
@@ -273,7 +341,7 @@ class HandDetector:
             state = self._process_single_hand(
                 hand_id=hand_id,
                 handedness=handedness,
-                raw_pts=raw_pts,
+                raw_pts=extrapolated_pts,
                 detection_conf=ghost_conf,
                 now=now,
                 annotated_frame=annotated_frame,

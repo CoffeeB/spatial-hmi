@@ -482,9 +482,11 @@ class FingerStateClassifier:
             # --- 3. Check FOLDED / TUCKED (Balled into fist: All joints curled deep into palm) ---
             if state == FingerStateEnum.UNCERTAIN:
                 if is_camera_facing:
-                    # In camera-facing view, do NOT rely on 2D palm distance (which collapses end-on)
-                    # Instead require genuine 3D joint flexion across PIP/MCP joints
-                    is_curled = (angle_pip >= 50.0 and (angle_mcp >= 35.0 or angle_dip >= 35.0)) or (angle_pip >= 58.0)
+                    # In camera-facing view, genuine 3D joint flexion across PIP/MCP joints defines curled/folded digits
+                    is_curled = (
+                        (angle_pip >= 42.0 or angle_mcp >= 35.0 or angle_dip >= 35.0)
+                        and (ext_r <= 1.05 or d_to_palm <= 0.65)
+                    ) or (angle_pip >= 55.0) or (ext_r <= 0.85)
                 else:
                     is_curled = (
                         (ext_r <= 0.96 or d_to_palm <= 0.54)
@@ -539,23 +541,23 @@ class FingerStateClassifier:
             if state == FingerStateEnum.UNCERTAIN:
                 if is_camera_facing:
                     # In camera-facing view, low PIP/DIP flexion means the digit is extended toward the camera
-                    if angle_pip <= 32.0 and angle_dip <= 28.0:
+                    if angle_pip <= 35.0 and angle_dip <= 32.0:
                         state = FingerStateEnum.EXTENDED
-                        confidence = float(np.clip(0.80 + max(ext_r - 1.0, 0.0) * 0.5, 0.85, 0.99))
+                        confidence = float(np.clip(0.85 + max(ext_r - 1.0, 0.0) * 0.4, 0.85, 0.99))
                         diags.append(f"[Finger-Centric] Camera-facing extension (PIP={angle_pip:.1f}deg, DIP={angle_dip:.1f}deg, ext_r={ext_r:.2f})")
-                    elif 32.0 < angle_pip <= 65.0 and angle_dip <= 55.0:
+                    elif 35.0 < angle_pip <= 68.0 and angle_dip <= 58.0:
                         state = FingerStateEnum.CURVED
                         confidence = 0.85
                         diags.append(f"[Finger-Centric] Camera-facing curved arc (PIP={angle_pip:.1f}deg)")
-                    elif ext_r >= 1.10:
+                    elif ext_r >= 1.05:
                         state = FingerStateEnum.EXTENDED
-                        confidence = 0.80
-                    elif angle_pip >= 48.0:
+                        confidence = 0.82
+                    elif angle_pip >= 50.0:
                         state = FingerStateEnum.FOLDED
                         confidence = 0.80
                     else:
                         state = FingerStateEnum.RELAXED
-                        confidence = 0.70
+                        confidence = 0.75
                 else:
                     if ext_r >= 1.15 and angle_pip <= 28.0 and angle_dip <= 25.0:
                         state = FingerStateEnum.EXTENDED
